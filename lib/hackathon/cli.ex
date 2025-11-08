@@ -20,6 +20,7 @@ defmodule Hackathon.CLI do
     |> procesar_comando()
   end
 
+  @doc false
   # Manejador del comando `/teams`. Lista todos los equipos registrados.
   defp procesar_comando(["/teams"]) do
     equipos = TeamManager.listar_equipos()

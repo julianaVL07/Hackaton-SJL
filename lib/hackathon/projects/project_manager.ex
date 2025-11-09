@@ -92,103 +92,129 @@ defmodule Hackathon.Projects.ProjectManager do
 
   @impl true
   @doc """
-  Registra un nuevo usuario en el sistema.
+  Maneja la creación de un nuevo proyecto.
 
-  - Verifica si el correo ya está registrado.
-  - Guarda la contraseña en formato hash.
-  - Genera un token de sesión automáticamente.
+  Si el nombre del equipo ya existe, devuelve un error.
+  En caso contrario, crea el proyecto, lo guarda y actualiza el estado del servidor.
   """
-  def handle_call({:registrar, email, password, nombre}, _from, state) do
-    if Map.has_key?(state.usuarios, email) do
-      {:reply, {:error, :usuario_existente}, state}
-    else
-      password_hash = hash_password(password)
-      usuario = %{password_hash: password_hash, nombre: nombre}
+  def handle_call({:crear_proyecto, nombre_equipo, descripcion, categoria}, _from, state) do
+    case Map.has_key?(state, nombre_equipo) do
+      true ->
+        {:reply, {:error, :proyecto_existente}, state}
 
-      usuarios_actualizados = Map.put(state.usuarios, email, usuario)
-      nuevo_state = %{state | usuarios: usuarios_actualizados}
-
-      token = generar_token()
-      tokens_actualizados = Map.put(nuevo_state.tokens, token, email)
-      nuevo_state_final = %{nuevo_state | tokens: tokens_actualizados}
-
-      {:reply, {:ok, %{token: token, email: email, nombre: nombre}}, nuevo_state_final}
+      false ->
+        proyecto = Project.new(nombre_equipo, descripcion, categoria)
+        nuevo_state = Map.put(state, nombre_equipo, proyecto)
+        Storage.guardar_proyectos(nuevo_state)
+        {:reply, {:ok, proyecto}, nuevo_state}
     end
   end
 
   @impl true
   @doc """
-  Inicia sesión para un usuario existente.
+  Actualiza el estado de un proyecto existente.
 
-  - Verifica las credenciales (correo y contraseña).
-  - Si son válidas, genera y devuelve un nuevo token de sesión.
+  Devuelve el proyecto actualizado si se encuentra, o un error si no existe.
   """
-  def handle_call({:login, email, password}, _from, state) do
-    case Map.fetch(state.usuarios, email) do
-      {:ok, usuario} ->
-        if verificar_password(password, usuario.password_hash) do
-          token = generar_token()
-          tokens_actualizados = Map.put(state.tokens, token, email)
-          nuevo_state = %{state | tokens: tokens_actualizados}
-
-          {:reply, {:ok, %{token: token, email: email, nombre: usuario.nombre}}, nuevo_state}
-        else
-          {:reply, {:error, :credenciales_invalidas}, state}
-        end
+  def handle_call({:actualizar_estado, nombre_equipo, estado}, _from, state) do
+    case Map.fetch(state, nombre_equipo) do
+      {:ok, proyecto} ->
+        proyecto_actualizado = Project.actualizar_estado(proyecto, estado)
+        nuevo_state = Map.put(state, nombre_equipo, proyecto_actualizado)
+        Storage.guardar_proyectos(nuevo_state)
+        {:reply, {:ok, proyecto_actualizado}, nuevo_state}
 
       :error ->
-        {:reply, {:error, :usuario_no_encontrado}, state}
+        {:reply, {:error, :proyecto_no_encontrado}, state}
     end
   end
 
   @impl true
   @doc """
-  Valida un token activo y devuelve la información del usuario asociado.
+  Agrega un avance a un proyecto.
+
+  Si el proyecto existe, se actualiza con el nuevo avance y se guarda.
+  En caso contrario, devuelve un error.
   """
-  def handle_call({:validar_token, token}, _from, state) do
-    case Map.fetch(state.tokens, token) do
-      {:ok, email} ->
-        usuario = Map.get(state.usuarios, email)
-        {:reply, {:ok, %{email: email, nombre: usuario.nombre}}, state}
+  def handle_call({:agregar_avance, nombre_equipo, avance}, _from, state) do
+    case Map.fetch(state, nombre_equipo) do
+      {:ok, proyecto} ->
+        proyecto_actualizado = Project.agregar_avance(proyecto, avance)
+        nuevo_state = Map.put(state, nombre_equipo, proyecto_actualizado)
+        Storage.guardar_proyectos(nuevo_state)
+        {:reply, {:ok, proyecto_actualizado}, nuevo_state}
 
       :error ->
-        {:reply, {:error, :token_invalido}, state}
+        {:reply, {:error, :proyecto_no_encontrado}, state}
     end
   end
 
   @impl true
   @doc """
-  Cierra la sesión del usuario eliminando su token activo.
+  Agrega una retroalimentación de un mentor a un proyecto.
+
+  Incluye el nombre del mentor y el contenido del comentario.
+  Si el proyecto no existe, devuelve un error.
   """
-  def handle_call({:logout, token}, _from, state) do
-    tokens_actualizados = Map.delete(state.tokens, token)
-    nuevo_state = %{state | tokens: tokens_actualizados}
-    {:reply, :ok, nuevo_state}
+  def handle_call(
+        {:agregar_retroalimentacion, nombre_equipo, mentor_nombre, contenido},
+        _from,
+        state
+      ) do
+    case Map.fetch(state, nombre_equipo) do
+      {:ok, proyecto} ->
+        proyecto_actualizado =
+          Project.agregar_retroalimentacion(proyecto, mentor_nombre, contenido)
+
+        nuevo_state = Map.put(state, nombre_equipo, proyecto_actualizado)
+        Storage.guardar_proyectos(nuevo_state)
+        {:reply, {:ok, proyecto_actualizado}, nuevo_state}
+
+      :error ->
+        {:reply, {:error, :proyecto_no_encontrado}, state}
+    end
   end
 
-  # FUNCIONES PRIVADAS
-
+  @impl true
   @doc """
-  Genera un hash SHA256 para almacenar contraseñas de forma segura.
+  Obtiene la información completa de un proyecto por su nombre de equipo.
+
+  Devuelve el proyecto si existe o un error si no se encuentra.
   """
-  defp hash_password(password) do
-    :crypto.hash(:sha256, password)
-    |> Base.encode16(case: :lower)
+  def handle_call({:obtener_proyecto, nombre_equipo}, _from, state) do
+    case Map.fetch(state, nombre_equipo) do
+      {:ok, proyecto} ->
+        {:reply, {:ok, proyecto}, state}
+
+      :error ->
+        {:reply, {:error, :proyecto_no_encontrado}, state}
+    end
   end
 
+  @impl true
   @doc """
-  Verifica si la contraseña ingresada coincide con el hash almacenado.
+  Lista todos los proyectos que pertenecen a una categoría específica.
   """
-  defp verificar_password(password, password_hash) do
-    hash_password(password) == password_hash
+  def handle_call({:listar_por_categoria, categoria}, _from, state) do
+    proyectos =
+      state
+      |> Map.values()
+      |> Enum.filter(fn proyecto -> proyecto.categoria == categoria end)
+
+    {:reply, proyectos, state}
   end
 
+  @impl true
   @doc """
-  Genera un token único de sesión en formato hexadecimal.
+  Lista todos los proyectos que tienen un estado determinado.
   """
-  defp generar_token do
-    :crypto.strong_rand_bytes(32)
-    |> Base.encode16(case: :lower)
+  def handle_call({:listar_por_estado, estado}, _from, state) do
+    proyectos =
+      state
+      |> Map.values()
+      |> Enum.filter(fn proyecto -> proyecto.estado == estado end)
+
+    {:reply, proyectos, state}
   end
 
 end

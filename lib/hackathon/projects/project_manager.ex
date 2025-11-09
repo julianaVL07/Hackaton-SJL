@@ -89,5 +89,106 @@ defmodule Hackathon.Projects.ProjectManager do
 
     {:ok, state}
   end
-  
+
+  @impl true
+  @doc """
+  Registra un nuevo usuario en el sistema.
+
+  - Verifica si el correo ya está registrado.
+  - Guarda la contraseña en formato hash.
+  - Genera un token de sesión automáticamente.
+  """
+  def handle_call({:registrar, email, password, nombre}, _from, state) do
+    if Map.has_key?(state.usuarios, email) do
+      {:reply, {:error, :usuario_existente}, state}
+    else
+      password_hash = hash_password(password)
+      usuario = %{password_hash: password_hash, nombre: nombre}
+
+      usuarios_actualizados = Map.put(state.usuarios, email, usuario)
+      nuevo_state = %{state | usuarios: usuarios_actualizados}
+
+      token = generar_token()
+      tokens_actualizados = Map.put(nuevo_state.tokens, token, email)
+      nuevo_state_final = %{nuevo_state | tokens: tokens_actualizados}
+
+      {:reply, {:ok, %{token: token, email: email, nombre: nombre}}, nuevo_state_final}
+    end
+  end
+
+  @impl true
+  @doc """
+  Inicia sesión para un usuario existente.
+
+  - Verifica las credenciales (correo y contraseña).
+  - Si son válidas, genera y devuelve un nuevo token de sesión.
+  """
+  def handle_call({:login, email, password}, _from, state) do
+    case Map.fetch(state.usuarios, email) do
+      {:ok, usuario} ->
+        if verificar_password(password, usuario.password_hash) do
+          token = generar_token()
+          tokens_actualizados = Map.put(state.tokens, token, email)
+          nuevo_state = %{state | tokens: tokens_actualizados}
+
+          {:reply, {:ok, %{token: token, email: email, nombre: usuario.nombre}}, nuevo_state}
+        else
+          {:reply, {:error, :credenciales_invalidas}, state}
+        end
+
+      :error ->
+        {:reply, {:error, :usuario_no_encontrado}, state}
+    end
+  end
+
+  @impl true
+  @doc """
+  Valida un token activo y devuelve la información del usuario asociado.
+  """
+  def handle_call({:validar_token, token}, _from, state) do
+    case Map.fetch(state.tokens, token) do
+      {:ok, email} ->
+        usuario = Map.get(state.usuarios, email)
+        {:reply, {:ok, %{email: email, nombre: usuario.nombre}}, state}
+
+      :error ->
+        {:reply, {:error, :token_invalido}, state}
+    end
+  end
+
+  @impl true
+  @doc """
+  Cierra la sesión del usuario eliminando su token activo.
+  """
+  def handle_call({:logout, token}, _from, state) do
+    tokens_actualizados = Map.delete(state.tokens, token)
+    nuevo_state = %{state | tokens: tokens_actualizados}
+    {:reply, :ok, nuevo_state}
+  end
+
+  # FUNCIONES PRIVADAS
+
+  @doc """
+  Genera un hash SHA256 para almacenar contraseñas de forma segura.
+  """
+  defp hash_password(password) do
+    :crypto.hash(:sha256, password)
+    |> Base.encode16(case: :lower)
+  end
+
+  @doc """
+  Verifica si la contraseña ingresada coincide con el hash almacenado.
+  """
+  defp verificar_password(password, password_hash) do
+    hash_password(password) == password_hash
+  end
+
+  @doc """
+  Genera un token único de sesión en formato hexadecimal.
+  """
+  defp generar_token do
+    :crypto.strong_rand_bytes(32)
+    |> Base.encode16(case: :lower)
+  end
+
 end

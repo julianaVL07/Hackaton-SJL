@@ -20,8 +20,14 @@ defmodule Hackathon.CLI do
     |> procesar_comando()
   end
 
+<<<<<<< Updated upstream
   @doc
   # Manejador del comando `/teams`. Lista todos los equipos registrados.
+=======
+  @doc """
+  Manejador del comando `/teams`. Lista todos los equipos registrados.
+  """
+>>>>>>> Stashed changes
   defp procesar_comando(["/teams"]) do
     equipos = TeamManager.listar_equipos()
 
@@ -41,9 +47,16 @@ defmodule Hackathon.CLI do
     :ok
   end
 
+<<<<<<< Updated upstream
   @doc
   # Manejador del comando `/project <nombre_equipo>`.
   # Muestra la información del proyecto asociado al equipo.
+=======
+  @doc """
+  Manejador del comando `/project <nombre_equipo>`.
+  Muestra la información del proyecto asociado al equipo.
+  """
+>>>>>>> Stashed changes
   defp procesar_comando(["/project", nombre_equipo]) do
     case ProjectManager.obtener_proyecto(nombre_equipo) do
       {:ok, proyecto} ->
@@ -72,9 +85,16 @@ defmodule Hackathon.CLI do
     :ok
   end
 
+<<<<<<< Updated upstream
 
   # Manejador del comando `/join <equipo> <nombre> <email>`.
   # Permite a un participante unirse a un equipo existente.
+=======
+  @doc """
+  Manejador del comando `/join <equipo> <nombre> <email>`.
+  Permite a un participante unirse a un equipo existente.
+  """
+>>>>>>> Stashed changes
   defp procesar_comando(["/join", nombre_equipo, nombre, email]) do
     case TeamManager.agregar_participante(nombre_equipo, nombre, email) do
       {:ok, _equipo} ->
@@ -90,9 +110,16 @@ defmodule Hackathon.CLI do
     :ok
   end
 
+<<<<<<< Updated upstream
 
   # Manejador del comando `/chat <sala>`.
   # Muestra el historial de mensajes de una sala de chat.
+=======
+  @doc """
+  Manejador del comando `/chat <sala>`.
+  Muestra el historial de mensajes de una sala de chat.
+  """
+>>>>>>> Stashed changes
   defp procesar_comando(["/chat", sala]) do
     case ChatServer.obtener_historial(sala) do
       {:ok, mensajes} ->

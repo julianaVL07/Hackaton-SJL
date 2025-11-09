@@ -20,7 +20,7 @@ defmodule Hackathon.CLI do
     |> procesar_comando()
   end
 
-  @doc false
+  @doc
   # Manejador del comando `/teams`. Lista todos los equipos registrados.
   defp procesar_comando(["/teams"]) do
     equipos = TeamManager.listar_equipos()
@@ -41,7 +41,7 @@ defmodule Hackathon.CLI do
     :ok
   end
 
-  @doc false
+  @doc
   # Manejador del comando `/project <nombre_equipo>`.
   # Muestra la información del proyecto asociado al equipo.
   defp procesar_comando(["/project", nombre_equipo]) do
@@ -72,7 +72,7 @@ defmodule Hackathon.CLI do
     :ok
   end
 
-  @doc false
+
   # Manejador del comando `/join <equipo> <nombre> <email>`.
   # Permite a un participante unirse a un equipo existente.
   defp procesar_comando(["/join", nombre_equipo, nombre, email]) do
@@ -90,7 +90,7 @@ defmodule Hackathon.CLI do
     :ok
   end
 
-  @doc false
+
   # Manejador del comando `/chat <sala>`.
   # Muestra el historial de mensajes de una sala de chat.
   defp procesar_comando(["/chat", sala]) do
@@ -114,6 +114,100 @@ defmodule Hackathon.CLI do
     end
 
     :ok
+  end
+
+@doc false
+  # Manejador del comando /mentors. Lista todos los mentores registrados.
+  defp procesar_comando(["/mentors"]) do
+    mentores = MentorManager.listar_mentores()
+
+    if Enum.empty?(mentores) do
+      IO.puts("\n No hay mentores registrados aún.\n")
+    else
+      IO.puts("\n MENTORES DISPONIBLES:\n")
+
+      Enum.each(mentores, fn mentor ->
+        IO.puts("  • #{mentor.nombre}")
+        IO.puts("    Especialidad: #{mentor.especialidad}")
+        IO.puts("    ID: #{mentor.id}")
+        IO.puts("")
+      end)
+    end
+
+    :ok
+  end
+
+
+  # Manejador del comando /help. Muestra la guía de ayuda.
+  defp procesar_comando(["/help"]) do
+    IO.puts("""
+
+     COMANDOS DISPONIBLES:
+
+      /teams
+        Lista todos los equipos registrados
+
+      /project <nombre_equipo>
+        Muestra información del proyecto de un equipo
+
+      /join <equipo> <nombre> <email>
+        Únete a un equipo existente
+
+      /chat <sala>
+        Muestra el historial de una sala de chat
+
+      /mentors
+        Lista todos los mentores disponibles
+
+      /help
+        Muestra esta ayuda
+
+    """)
+
+    :ok
+  end
+
+
+  # Manejador para comandos no reconocidos.
+  defp procesar_comando(_) do
+    IO.puts("\n Comando no reconocido. Escribe /help para ver los comandos disponibles.\n")
+    :error
+  end
+
+  @doc """
+  Inicia el modo interactivo de la CLI, mostrando un prompt en la consola
+  y permitiendo ingresar comandos hasta escribir salir.
+  """
+  def iniciar_modo_interactivo do
+    IO.puts("""
+
+     SISTEMA DE HACKATHON COLABORATIVA
+
+    Escribe /help para ver los comandos disponibles.
+    Escribe 'salir' para terminar.
+
+    """)
+
+    loop_interactivo()
+  end
+
+
+  # Ciclo principal del modo interactivo.
+  defp loop_interactivo do
+    entrada = IO.gets("hackathon> ") |> String.trim()
+
+    case entrada do
+      "salir" ->
+        IO.puts("\n ¡Hasta pronto!\n")
+        :ok
+
+      "" ->
+        loop_interactivo()
+
+      comando ->
+        ejecutar(comando)
+        loop_interactivo()
+    end
   end
 
 end

@@ -55,4 +55,40 @@ defmodule Hackathon.Security do
     end
   end
 
+  @doc """
+  Codifica los datos cifrados (iv, tag, texto_cifrado)
+  a formato *Base64* y los convierte a JSON para almacenamiento o transmisión.
+  """
+  def codificar({iv, tag, texto_cifrado}) do
+    datos = %{
+      iv: Base.encode64(iv),
+      tag: Base.encode64(tag),
+      contenido: Base.encode64(texto_cifrado)
+    }
+
+    Jason.encode!(datos)
+  end
+
+  @doc """
+  Decodifica una cadena JSON en formato Base64 y
+  reconstruye la tupla {iv, tag, texto_cifrado} necesaria para descifrar el mensaje.
+  """
+  def decodificar(json_string) do
+    {:ok, datos} = Jason.decode(json_string)
+
+    {
+      Base.decode64!(datos["iv"]),
+      Base.decode64!(datos["tag"]),
+      Base.decode64!(datos["contenido"])
+    }
+  end
+
+  @doc """
+  Normaliza la clave de cifrado para que tenga exactamente 32 bytes (256 bits),
+  utilizando un hash SHA-256.
+  """
+  defp normalizar_clave(clave) when is_binary(clave) do
+    :crypto.hash(:sha256, clave)
+  end
+
 end

@@ -82,10 +82,8 @@ defmodule Hackathon.Storage do
     end
   end
 
-  # ---------------------------------------------------------------------------
   # PERSISTENCIA DE PROYECTOS
-  # ---------------------------------------------------------------------------
-
+  
   @doc """
   Guarda proyectos en `proyectos.csv`.
 

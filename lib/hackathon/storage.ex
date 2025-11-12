@@ -17,7 +17,7 @@ defmodule Hackathon.Storage do
 
 
   # PERSISTENCIA DE EQUIPOS
-  
+
 
   @doc """
   Guarda equipos en un archivo CSV (`equipos.csv`).
@@ -57,7 +57,6 @@ defmodule Hackathon.Storage do
 
   @doc """
   Carga equipos desde `equipos.csv`.
-
   Retorna:
       {:ok, %{nombre_equipo => %Hackathon.Teams.Team{}}}
       {:error, :not_found} si el archivo no existe
@@ -86,8 +85,7 @@ defmodule Hackathon.Storage do
 
   @doc """
   Guarda proyectos en `proyectos.csv`.
-
-  Se guardan avances y retroalimentaciones como JSON.
+  Se guardan avances y retroalimentaciones.
   """
   def guardar_proyectos(proyectos) when is_map(proyectos) do
     File.mkdir_p!(@storage_dir)
@@ -122,11 +120,7 @@ defmodule Hackathon.Storage do
 
   @doc """
   Carga proyectos desde `proyectos.csv`.
-
-  Reconstruye:
-    - Fechas en DateTime
-    - Listas de avances
-    - Retroalimentaciones con fecha
+  Reconstruye: Fechas en DateTime, Listas de avances y Retroalimentaciones con fecha
   """
   def cargar_proyectos do
     ruta = Path.join(@storage_dir, "proyectos.csv")
@@ -146,6 +140,179 @@ defmodule Hackathon.Storage do
       {:error, :enoent} -> {:error, :not_found}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  # ---------------------------------------------------------------------------
+  # PERSISTENCIA DE MENTORES
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Guarda mentores en mentores.csv.
+  Las retroalimentaciones se almacenan.
+  """
+  def guardar_mentores(mentores) when is_map(mentores) do
+    File.mkdir_p!(@storage_dir)
+    ruta = Path.join(@storage_dir, "mentores.csv")
+
+    encabezados = "id,nombre,especialidad,retroalimentaciones_json\n"
+
+    filas =
+      mentores
+      |> Map.values()
+      |> Enum.map(fn mentor ->
+        retros_json = Jason.encode!(mentor.retroalimentaciones)
+
+        [
+          mentor.id,
+          escapar_csv(mentor.nombre),
+          escapar_csv(mentor.especialidad),
+          escapar_csv(retros_json)
+        ]
+        |> Enum.join(",")
+      end)
+      |> Enum.join("\n")
+
+    File.write!(ruta, encabezados <> filas <> "\n")
+    :ok
+  end
+
+  @doc """
+  Carga mentores desde mentores.csv.
+  """
+  def cargar_mentores do
+    ruta = Path.join(@storage_dir, "mentores.csv")
+
+    case File.read(ruta) do
+      {:ok, contenido} ->
+        mentores =
+          contenido
+          |> String.split("\n", trim: true)
+          |> Enum.drop(1)
+          |> Enum.map(&parsear_mentor/1)
+          |> Enum.reject(&is_nil/1)
+          |> Map.new(fn mentor -> {mentor.id, mentor} end)
+
+        {:ok, mentores}
+
+      {:error, :enoent} -> {:error, :not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # FUNCIONES PRIVADAS DE PARSEO CSV
+  # ---------------------------------------------------------------------------
+
+  # Convierte línea CSV - struct Equipo
+  defp parsear_equipo(linea) do
+    case String.split(linea, ",") do
+      [id, nombre, tema, participantes_json, creado_en] ->
+        {:ok, participantes} = Jason.decode(desescapar_csv(participantes_json))
+        {:ok, fecha, _} = DateTime.from_iso8601(creado_en)
+
+        %Hackathon.Teams.Team{
+          id: id,
+          nombre: desescapar_csv(nombre),
+          tema: desescapar_csv(tema),
+          participantes: atomizar_participantes(participantes),
+          creado_en: fecha
+        }
+
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  # Convierte línea CSV → struct Proyecto
+  defp parsear_proyecto(linea) do
+    case String.split(linea, ",") do
+      [id, nombre_equipo, descripcion, categoria, estado, avances_json, retros_json, creado_en] ->
+        {:ok, avances} = Jason.decode(desescapar_csv(avances_json))
+        {:ok, retros_raw} = Jason.decode(desescapar_csv(retros_json))
+        {:ok, fecha, _} = DateTime.from_iso8601(creado_en)
+
+        retros =
+          Enum.map(retros_raw, fn r ->
+            {:ok, fecha_retro, _} = DateTime.from_iso8601(r["fecha"])
+            %{
+              mentor: r["mentor"],
+              contenido: r["contenido"],
+              fecha: fecha_retro
+            }
+          end)
+
+        %Hackathon.Projects.Project{
+          id: id,
+          nombre_equipo: desescapar_csv(nombre_equipo),
+          descripcion: desescapar_csv(descripcion),
+          categoria: String.to_atom(categoria),
+          estado: String.to_atom(estado),
+          avances: avances,
+          retroalimentaciones: retros,
+          creado_en: fecha
+        }
+
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  # Convierte línea CSV -> struct Mentor
+  defp parsear_mentor(linea) do
+    case String.split(linea, ",") do
+      [id, nombre, especialidad, retros_json] ->
+        {:ok, retros_raw} = Jason.decode(desescapar_csv(retros_json))
+
+        retros =
+          Enum.map(retros_raw, fn r ->
+            {:ok, fecha, _} = DateTime.from_iso8601(r["fecha"])
+            %{
+              equipo: r["equipo"],
+              contenido: r["contenido"],
+              fecha: fecha
+            }
+          end)
+
+        %Hackathon.Mentors.Mentor{
+          id: id,
+          nombre: desescapar_csv(nombre),
+          especialidad: desescapar_csv(especialidad),
+          retroalimentaciones: retros
+        }
+
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  # Limpia estructura JSON de participantes
+  defp atomizar_participantes(participantes) do
+    Enum.map(participantes, fn p ->
+      %{
+        nombre: p["nombre"],
+        email: p["email"]
+      }
+    end)
+  end
+
+  # Escapa comas y comillas en campos CSV
+  defp escapar_csv(texto) when is_binary(texto) do
+    if String.contains?(texto, [",", "\"", "\n"]) do
+      "\"#{String.replace(texto, "\"", "\"\"")}\""
+    else
+      texto
+    end
+  end
+
+  # Revierte escape CSV
+  defp desescapar_csv(texto) when is_binary(texto) do
+    texto
+    |> String.trim()
+    |> String.trim("\"")
+    |> String.replace("\"\"", "\"")
   end
 
 end

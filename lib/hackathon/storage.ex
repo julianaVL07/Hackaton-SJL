@@ -15,9 +15,9 @@ defmodule Hackathon.Storage do
   # Carpeta donde se almacenan los archivos CSV
   @storage_dir "priv/storage"
 
-  # ---------------------------------------------------------------------------
+
   # PERSISTENCIA DE EQUIPOS
-  # ---------------------------------------------------------------------------
+  
 
   @doc """
   Guarda equipos en un archivo CSV (`equipos.csv`).
@@ -83,7 +83,7 @@ defmodule Hackathon.Storage do
   end
 
   # PERSISTENCIA DE PROYECTOS
-  
+
   @doc """
   Guarda proyectos en `proyectos.csv`.
 

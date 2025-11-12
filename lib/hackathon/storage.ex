@@ -142,9 +142,9 @@ defmodule Hackathon.Storage do
     end
   end
 
-  # ---------------------------------------------------------------------------
+
   # PERSISTENCIA DE MENTORES
-  # ---------------------------------------------------------------------------
+
 
   @doc """
   Guarda mentores en mentores.csv.
@@ -199,9 +199,9 @@ defmodule Hackathon.Storage do
     end
   end
 
-  # ---------------------------------------------------------------------------
+
   # FUNCIONES PRIVADAS DE PARSEO CSV
-  # ---------------------------------------------------------------------------
+ 
 
   # Convierte línea CSV - struct Equipo
   defp parsear_equipo(linea) do

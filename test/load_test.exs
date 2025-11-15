@@ -75,7 +75,21 @@ defmodule LoadTest do
 
     IO.puts("Mensajes enviados en #{tiempo_chat}ms")
 
+    @doc """
+    Calcula y muestra un resumen general del rendimiento, incluyendo
+    tiempo total, promedio por equipo y equipos procesados por segundo.
+    """
+    tiempo_total = System.monotonic_time(:millisecond) - inicio
 
+    IO.puts("\nRESUMEN:")
+    IO.puts("  Tiempo total: #{tiempo_total}ms")
+    IO.puts("  Promedio por equipo: #{div(tiempo_total, num_equipos)}ms")
+    IO.puts("  Equipos/segundo: #{Float.round(num_equipos / (tiempo_total / 1000), 2)}")
+
+    :ok
   end
+
+
+
 
 end

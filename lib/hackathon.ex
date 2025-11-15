@@ -26,6 +26,7 @@ defmodule Hackathon do
   """
   defdelegate obtener_equipo(nombre_equipo), to: Hackathon.Teams.TeamManager
 
+  # Projects
   @doc """
   Crea un nuevo proyecto asociado a un equipo, con su descripción y categoría.
   """
@@ -65,4 +66,25 @@ defmodule Hackathon do
   Lista los proyectos filtrados por estado.
   """
   defdelegate listar_proyectos_por_estado(estado), to: Hackathon.Projects.ProjectManager
+
+  # Chat
+  @doc """
+  Envía un mensaje a una sala de chat existente.
+  """
+  defdelegate enviar_mensaje(sala, autor, contenido), to: Hackathon.Chat.ChatServer
+
+  @doc """
+  Obtiene el historial completo de mensajes de una sala.
+  """
+  defdelegate obtener_historial(sala), to: Hackathon.Chat.ChatServer
+
+  @doc """
+  Crea una nueva sala de chat.
+  """
+  defdelegate crear_sala(nombre_sala), to: Hackathon.Chat.ChatServer
+
+  @doc """
+  Lista todas las salas registradas en el sistema.
+  """
+  defdelegate listar_salas(), to: Hackathon.Chat.ChatServer
 end

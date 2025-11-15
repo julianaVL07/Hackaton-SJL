@@ -160,6 +160,19 @@ defmodule HackathonTest do
                  "Excelente progreso"
                )
     end
-  end
 
+     @doc """
+    Verifica que la retroalimentación enviada por un mentor quede guardada en el proyecto asociado.
+    """
+    test "retroalimentación se guarda en proyecto" do
+      Hackathon.crear_equipo("TestTeam", "IA")
+      Hackathon.crear_proyecto("TestTeam", "App", :educativo)
+      {:ok, mentor} = Hackathon.registrar_mentor("Dr. Smith", "IA")
+
+      Hackathon.enviar_retroalimentacion(mentor.id, "TestTeam", "Buen trabajo")
+
+      {:ok, proyecto} = Hackathon.obtener_proyecto("TestTeam")
+      assert length(proyecto.retroalimentaciones) == 1
+    end
+  end
 end

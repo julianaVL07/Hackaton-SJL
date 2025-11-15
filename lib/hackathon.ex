@@ -87,4 +87,26 @@ defmodule Hackathon do
   Lista todas las salas registradas en el sistema.
   """
   defdelegate listar_salas(), to: Hackathon.Chat.ChatServer
+
+  # Mentors
+  @doc """
+  Registra un mentor con nombre y especialidad.
+  """
+  defdelegate registrar_mentor(nombre, especialidad), to: Hackathon.Mentors.MentorManager
+
+  @doc """
+  Envía retroalimentación desde un mentor hacia un equipo.
+  """
+  defdelegate enviar_retroalimentacion(mentor_id, equipo, contenido),
+    to: Hackathon.Mentors.MentorManager
+
+  @doc """
+  Lista todos los mentores registrados.
+  """
+  defdelegate listar_mentores(), to: Hackathon.Mentors.MentorManager
+
+  @doc """
+  Obtiene los datos de un mentor según su ID.
+  """
+  defdelegate obtener_mentor(mentor_id), to: Hackathon.Mentors.MentorManager
 end

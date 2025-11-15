@@ -19,5 +19,22 @@ defmodule LoadTest do
     IO.puts("  Total de participantes: #{num_equipos * participantes_por_equipo}\n")
 
     inicio = System.monotonic_time(:millisecond)
+
+
+
+    @doc """
+    Crea equipos concurrentemente utilizando `Task.async_stream`, retornando
+    la lista de equipos creados y midiendo su tiempo de ejecución.
+    """
+    equipos_task =
+      Task.async(fn ->
+        crear_equipos_paralelo(num_equipos)
+      end)
+
+    equipos = Task.await(equipos_task, 30_000)
+    tiempo_equipos = System.monotonic_time(:millisecond) - inicio
+
+    IO.puts(" #{length(equipos)} equipos creados en #{tiempo_equipos}ms")
   end
+
 end

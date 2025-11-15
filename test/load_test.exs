@@ -62,6 +62,20 @@ defmodule LoadTest do
 
     IO.puts("Proyectos creados en #{tiempo_proyectos}ms")
 
+    #Comit 6 - Simular mensajes de chat en paralelo
+    @doc """
+    Simula la actividad del chat enviando múltiples mensajes por equipo
+    a través de procesos concurrentes.
+    """
+    inicio_chat = System.monotonic_time(:millisecond)
+
+    simular_chat_paralelo(equipos, 10)
+
+    tiempo_chat = System.monotonic_time(:millisecond) - inicio_chat
+
+    IO.puts("Mensajes enviados en #{tiempo_chat}ms")
+
+
   end
 
 end

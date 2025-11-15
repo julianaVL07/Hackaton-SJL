@@ -106,4 +106,13 @@ defmodule HackathonTest do
     end
   end
 
+  describe "Sistema de Chat" do
+    @doc """
+    Verifica que se pueda crear una sala de chat para un equipo.
+    """
+    test "crear sala de chat" do
+      assert {:ok, _} = Hackathon.crear_sala("TestTeam")
+    end
+  end
+
 end

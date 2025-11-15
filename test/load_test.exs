@@ -35,6 +35,22 @@ defmodule LoadTest do
     tiempo_equipos = System.monotonic_time(:millisecond) - inicio
 
     IO.puts(" #{length(equipos)} equipos creados en #{tiempo_equipos}ms")
+
+
+
+    @doc """
+    Agrega participantes a cada equipo de manera paralela.
+    Mide el tiempo necesario para completar el proceso.
+    """
+    inicio_participantes = System.monotonic_time(:millisecond)
+
+    agregar_participantes_paralelo(equipos, participantes_por_equipo)
+
+    tiempo_participantes = System.monotonic_time(:millisecond) - inicio_participantes
+
+    IO.puts("Participantes agregados en #{tiempo_participantes}ms")
+
+
   end
 
 end

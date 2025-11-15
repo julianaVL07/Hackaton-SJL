@@ -92,6 +92,18 @@ defmodule HackathonTest do
       assert length(proyecto.avances) == 1
     end
 
+    @doc """
+    Verifica que el sistema pueda listar proyectos según su categoría.
+    """
+    test "listar proyectos por categoría" do
+      Hackathon.crear_equipo("Team1", "IA")
+      Hackathon.crear_equipo("Team2", "IoT")
+      Hackathon.crear_proyecto("Team1", "App educativa", :educativo)
+      Hackathon.crear_proyecto("Team2", "Sensor ambiental", :ambiental)
+
+      proyectos = Hackathon.listar_proyectos_por_categoria(:educativo)
+      assert length(proyectos) == 1
+    end
   end
 
 end

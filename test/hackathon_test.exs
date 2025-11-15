@@ -113,6 +113,15 @@ defmodule HackathonTest do
     test "crear sala de chat" do
       assert {:ok, _} = Hackathon.crear_sala("TestTeam")
     end
+
+     @doc """
+    Verifica que un usuario pueda enviar mensajes correctamente a una sala existente.
+    """
+    test "enviar mensaje a sala" do
+      Hackathon.crear_sala("TestTeam")
+      assert :ok = Hackathon.enviar_mensaje("TestTeam", "Ana", "Hola equipo")
+    end
+
   end
 
 end

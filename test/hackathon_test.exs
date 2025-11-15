@@ -79,7 +79,19 @@ defmodule HackathonTest do
       assert proyecto.estado == :en_progreso
     end
 
-    
+    @doc """
+    Verifica que se puedan agregar avances al proyecto y que se almacenen correctamente.
+    """
+    test "agregar avances al proyecto" do
+      Hackathon.crear_equipo("TestTeam", "IA")
+      Hackathon.crear_proyecto("TestTeam", "App educativa", :educativo)
+
+      assert {:ok, proyecto} =
+               Hackathon.agregar_avance_proyecto("TestTeam", "Prototipo completado")
+
+      assert length(proyecto.avances) == 1
+    end
+
   end
 
 end

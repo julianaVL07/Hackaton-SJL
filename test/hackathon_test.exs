@@ -42,6 +42,19 @@ defmodule HackathonTest do
       assert {:ok, _} = Hackathon.agregar_participante("TestTeam", "Ana", "ana@test.com")
     end
 
+
+
+    @doc """
+    Verifica que no se puedan registrar dos participantes con el mismo email
+    dentro del mismo equipo.
+    """
+    test "no permite participantes duplicados por email" do
+      Hackathon.crear_equipo("TestTeam", "IA")
+      Hackathon.agregar_participante("TestTeam", "Ana", "ana@test.com")
+
+      assert {:error, :participante_duplicado} =
+               Hackathon.agregar_participante("TestTeam", "Ana García", "ana@test.com")
+    end
   end
 
 

@@ -144,6 +144,22 @@ defmodule HackathonTest do
       assert mentor.nombre == "Dr. Smith"
       assert mentor.especialidad == "IA"
     end
+
+    @doc """
+    Verifica que un mentor pueda enviar retroalimentación a un equipo.
+    """
+    test "enviar retroalimentación a equipo" do
+      Hackathon.crear_equipo("TestTeam", "IA")
+      Hackathon.crear_proyecto("TestTeam", "App", :educativo)
+      {:ok, mentor} = Hackathon.registrar_mentor("Dr. Smith", "IA")
+
+      assert {:ok, _} =
+               Hackathon.enviar_retroalimentacion(
+                 mentor.id,
+                 "TestTeam",
+                 "Excelente progreso"
+               )
+    end
   end
 
 end

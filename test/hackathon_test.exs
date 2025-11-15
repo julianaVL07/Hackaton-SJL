@@ -122,6 +122,17 @@ defmodule HackathonTest do
       assert :ok = Hackathon.enviar_mensaje("TestTeam", "Ana", "Hola equipo")
     end
 
+    @doc """
+    Verifica que el historial de mensajes se recupere correctamente.
+    """
+    test "obtener historial de mensajes" do
+      Hackathon.crear_sala("TestTeam")
+      Hackathon.enviar_mensaje("TestTeam", "Ana", "Mensaje 1")
+      Hackathon.enviar_mensaje("TestTeam", "Carlos", "Mensaje 2")
+
+      assert {:ok, mensajes} = Hackathon.obtener_historial("TestTeam")
+      assert length(mensajes) == 2
+    end
   end
 
 end

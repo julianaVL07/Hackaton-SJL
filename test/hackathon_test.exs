@@ -12,9 +12,7 @@ defmodule HackathonTest do
   end
 
 
-  #Comit 2
-# Título: añadir pruebas para creación básica de equipos
-# Descripción: Incluye casos para validar creación exitosa de equipos.
+
 describe "Gestión de Equipos" do
   @doc """
   Verifica que se pueda crear un equipo correctamente con nombre y tema válidos.
@@ -25,6 +23,15 @@ describe "Gestión de Equipos" do
     assert equipo.tema == "IA"
   end
 end
+
+
+  @doc """
+  Verifica que el sistema no permita registrar dos equipos con el mismo nombre.
+  """
+  test "no permite equipos duplicados" do
+    Hackathon.crear_equipo("TestTeam", "IA")
+    assert {:error, :equipo_existente} = Hackathon.crear_equipo("TestTeam", "Blockchain")
+  end
 
 
 end

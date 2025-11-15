@@ -112,4 +112,25 @@ defmodule LoadTest do
     |> Enum.reject(&is_nil/1)
   end
 
+   @doc """
+  Agrega múltiples participantes a cada equipo de manera concurrente.
+  Cada participante recibe un email único basado en su equipo.
+  """
+  defp agregar_participantes_paralelo(equipos, num_participantes) do
+    equipos
+    |> Task.async_stream(
+      fn equipo ->
+        1..num_participantes
+        |> Enum.each(fn j ->
+          nombre = "Participante_#{j}"
+          email = "participante_#{j}_#{equipo}@test.com"
+          Hackathon.agregar_participante(equipo, nombre, email)
+        end)
+      end,
+      max_concurrency: 50,
+      timeout: 10_000
+    )
+    |> Stream.run()
+  end
+
 end

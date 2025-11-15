@@ -12,7 +12,6 @@ defmodule HackathonTest do
   end
 
 
-
   describe "Gestión de Equipos" do
     @doc """
     Verifica que se pueda crear un equipo correctamente con nombre y tema válidos.
@@ -57,5 +56,18 @@ defmodule HackathonTest do
     end
   end
 
+
+  describe "Gestión de Proyectos" do
+    @doc """
+    Verifica que un proyecto pueda ser creado correctamente para un equipo existente.
+    """
+    test "crear proyecto exitosamente" do
+      Hackathon.crear_equipo("TestTeam", "IA")
+      assert {:ok, proyecto} = Hackathon.crear_proyecto("TestTeam", "App educativa", :educativo)
+      assert proyecto.categoria == :educativo
+      assert proyecto.estado == :iniciado
+    end
+    
+  end
 
 end

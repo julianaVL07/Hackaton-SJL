@@ -67,6 +67,18 @@ defmodule HackathonTest do
       assert proyecto.categoria == :educativo
       assert proyecto.estado == :iniciado
     end
+
+    @doc """
+    Verifica que el estado de un proyecto pueda actualizarse correctamente.
+    """
+    test "actualizar estado del proyecto" do
+      Hackathon.crear_equipo("TestTeam", "IA")
+      Hackathon.crear_proyecto("TestTeam", "App educativa", :educativo)
+
+      assert {:ok, proyecto} = Hackathon.actualizar_estado_proyecto("TestTeam", :en_progreso)
+      assert proyecto.estado == :en_progreso
+    end
+
     
   end
 

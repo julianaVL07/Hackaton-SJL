@@ -135,4 +135,15 @@ defmodule HackathonTest do
     end
   end
 
+   @doc """
+    Verifica que un mentor pueda registrarse con nombre y especialidad válidos.
+    """
+    describe "Sistema de Mentoría" do
+    test "registrar mentor" do
+      assert {:ok, mentor} = Hackathon.registrar_mentor("Dr. Smith", "IA")
+      assert mentor.nombre == "Dr. Smith"
+      assert mentor.especialidad == "IA"
+    end
+  end
+
 end

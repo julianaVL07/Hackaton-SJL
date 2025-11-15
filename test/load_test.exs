@@ -133,4 +133,24 @@ defmodule LoadTest do
     |> Stream.run()
   end
 
+  @doc """
+  Crea proyectos para cada equipo seleccionando categorías aleatorias.
+  La creación se realiza de forma concurrente.
+  """
+  defp crear_proyectos_paralelo(equipos) do
+    categorias = [:social, :ambiental, :educativo]
+
+    equipos
+    |> Task.async_stream(
+      fn equipo ->
+        categoria = Enum.random(categorias)
+        descripcion = "Proyecto innovador de #{equipo}"
+        Hackathon.crear_proyecto(equipo, descripcion, categoria)
+      end,
+      max_concurrency: 50,
+      timeout: 10_000
+    )
+    |> Stream.run()
+  end
+
 end

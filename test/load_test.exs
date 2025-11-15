@@ -89,7 +89,27 @@ defmodule LoadTest do
     :ok
   end
 
+  @doc """
+  Crea varios equipos en paralelo asignando temas aleatorios.
+  Utiliza Task.async_stream para maximizar eficiencia.
+  """
+  defp crear_equipos_paralelo(num_equipos) do
+    1..num_equipos
+    |> Task.async_stream(
+      fn i ->
+        nombre = "Equipo_#{i}"
+        tema = Enum.random(["IA", "Blockchain", "IoT", "Web3", "Cloud"])
 
-
+        case Hackathon.crear_equipo(nombre, tema) do
+          {:ok, equipo} -> equipo.nombre
+          _ -> nil
+        end
+      end,
+      max_concurrency: 50,
+      timeout: 10_000
+    )
+    |> Enum.map(fn {:ok, nombre} -> nombre end)
+    |> Enum.reject(&is_nil/1)
+  end
 
 end

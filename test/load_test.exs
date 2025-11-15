@@ -50,6 +50,17 @@ defmodule LoadTest do
 
     IO.puts("Participantes agregados en #{tiempo_participantes}ms")
 
+    @doc """
+    Crea un proyecto por equipo utilizando concurrencia,
+    asignando categorías aleatorias y midiendo el tiempo.
+    """
+    inicio_proyectos = System.monotonic_time(:millisecond)
+
+    crear_proyectos_paralelo(equipos)
+
+    tiempo_proyectos = System.monotonic_time(:millisecond) - inicio_proyectos
+
+    IO.puts("Proyectos creados en #{tiempo_proyectos}ms")
 
   end
 

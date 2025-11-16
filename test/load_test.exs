@@ -153,4 +153,31 @@ defmodule LoadTest do
     |> Stream.run()
   end
 
+  @doc """
+  Crea una sala de chat por equipo y envía múltiples mensajes de prueba
+  para evaluar rendimiento del módulo de chat.
+  """
+  defp simular_chat_paralelo(equipos, mensajes_por_equipo) do
+    equipos
+    |> Task.async_stream(
+      fn equipo ->
+        Hackathon.crear_sala(equipo)
+
+        1..mensajes_por_equipo
+        |> Enum.each(fn i ->
+          autor = "Usuario#{i}"
+          mensaje = "Mensaje de prueba #{i}"
+          Hackathon.enviar_mensaje(equipo, autor, mensaje)
+        end)
+      end,
+      max_concurrency: 50,
+      timeout: 10_000
+    )
+    |> Stream.run()
+  end
+
+
+# Ejecutar prueba
+# LoadTest.simular_hackathon(100, 5)  # 100 equipos, 5 participantes cada uno
+
 end

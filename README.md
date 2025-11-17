@@ -89,8 +89,7 @@ lib/
        └── project_manager.ex
 
 Y tambien cuenta con:
-priv/
-storage/
+priv/storage
 mix.exs
 mix.lock
 README.md

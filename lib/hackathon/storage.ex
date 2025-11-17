@@ -1,318 +1,336 @@
 defmodule Hackathon.Storage do
   @moduledoc """
-  Módulo encargado de la persistencia de datos del sistema en archivos CSV.
-
-  Este módulo guarda y carga la información relacionada con:
-    - Equipos
-    - Proyectos
-    - Mentores
-
-  Cada tipo de dato se almacena en un archivo CSV independiente dentro de
-  `priv/storage`. Se usa JSON para guardar campos que contienen listas o
-  estructuras complejas (como participantes o retroalimentaciones).
+  Persistencia global (equipos, proyectos, mentores, chats) usando archivos ETF.
   """
 
-  # Carpeta donde se almacenan los archivos CSV
-  @storage_dir "priv/storage"
+  @base_dir Path.join(Application.app_dir(:hackathon, "priv"), "storage")
+  @chat_dir Path.join(@base_dir, "chat")
 
-
-  # PERSISTENCIA DE EQUIPOS
-
+  ## API
 
   @doc """
-  Guarda equipos en un archivo CSV (`equipos.csv`).
-  Cada fila en CSV guarda:
-    id,nombre,tema,participantes_json,creado_en
+  Inicializa el sistema de persistencia cargando todos los datos desde disco.
   """
-  def guardar_equipos(equipos) when is_map(equipos) do
-    # Asegurar que el directorio existe
-    File.mkdir_p!(@storage_dir)
-    ruta = Path.join(@storage_dir, "equipos.csv")
-
-    # Definir encabezados del CSV
-    encabezados = "id,nombre,tema,participantes_json,creado_en\n"
-
-    # Convertir cada equipo en una línea CSV
-    filas =
-      equipos
-      |> Map.values()
-      |> Enum.map(fn equipo ->
-        # Los participantes se guardan como JSON para no perder estructura
-        participantes_json = Jason.encode!(equipo.participantes)
-
-        [
-          equipo.id,
-          escapar_csv(equipo.nombre),
-          escapar_csv(equipo.tema),
-          escapar_csv(participantes_json),
-          DateTime.to_iso8601(equipo.creado_en)
-        ]
-        |> Enum.join(",")
-      end)
-      |> Enum.join("\n")
-
-    File.write!(ruta, encabezados <> filas <> "\n")
+  def bootstrap do
+    ensure_dirs()
+    cargar_equipos()
+    cargar_mentores()
+    cargar_proyectos()
+    cargar_chats()
     :ok
   end
 
   @doc """
-  Carga equipos desde `equipos.csv`.
-  Retorna:
-      {:ok, %{nombre_equipo => %Hackathon.Teams.Team{}}}
-      {:error, :not_found} si el archivo no existe
+  Guarda el estado actual de equipos, mentores, proyectos y chats en archivos ETF.
+  """
+  def persist_state do
+    ensure_dirs()
+
+    equipos_map =
+      safe_list(fn -> Hackathon.Teams.TeamManager.listar_equipos() end)
+      |> Enum.reduce(%{}, fn t, acc -> Map.put(acc, t.nombre, t) end)
+
+    mentores_map =
+      safe_list(fn -> Hackathon.Mentors.MentorManager.listar_mentores() end)
+      |> Enum.reduce(%{}, fn m, acc ->
+        key = if Map.has_key?(m, :id), do: m.id, else: m.nombre
+        Map.put(acc, key, m)
+      end)
+
+    proyectos_map =
+      case safe(fn -> apply(Hackathon.Projects.ProjectManager, :listar_proyectos, []) end) do
+        list when is_list(list) ->
+          Enum.reduce(list, %{}, fn p, acc ->
+            key =
+              if Map.has_key?(p, :nombre_equipo), do: p.nombre_equipo, else: Map.get(p, :id, p)
+
+            Map.put(acc, key, p)
+          end)
+
+        _ ->
+          %{
+            "default" => %{
+              id: "default",
+              nombre_equipo: "Equipo Sin Nombre",
+              integrantes: [],
+              descripcion: "Proyecto sin descripción",
+              estado: "pendiente"
+            }
+          }
+      end
+
+    guardar_equipos(equipos_map)
+    guardar_mentores(mentores_map)
+    guardar_proyectos(proyectos_map)
+    guardar_chats()
+    :ok
+  end
+
+  @doc """
+  Retorna información básica de persistencia: cantidades guardadas de equipos, proyectos, mentores y salas.
+  """
+  def persist_info do
+    ensure_dirs()
+
+    equipos = load_etf("teams.etf") || %{}
+    proyectos = load_etf("projects.etf") || %{}
+    mentores = load_etf("mentors.etf") || %{}
+    salas = load_etf(Path.join("chat", "index.etf")) || []
+
+    %{
+      equipos: map_size(equipos),
+      proyectos: map_size(proyectos),
+      mentores: map_size(mentores),
+      salas_chat: length(salas)
+    }
+  end
+
+  ## Carga (públicas para los managers)
+
+  @doc """
+  Carga los equipos desde el archivo de persistencia.
   """
   def cargar_equipos do
-    ruta = Path.join(@storage_dir, "equipos.csv")
-
-    case File.read(ruta) do
-      {:ok, contenido} ->
-        equipos =
-          contenido
-          |> String.split("\n", trim: true)
-          |> Enum.drop(1) # Quitar encabezado
-          |> Enum.map(&parsear_equipo/1)
-          |> Enum.reject(&is_nil/1)
-          |> Map.new(fn equipo -> {equipo.nombre, equipo} end)
-
-        {:ok, equipos}
-
-      {:error, :enoent} -> {:error, :not_found}
-      {:error, reason} -> {:error, reason}
+    case load_etf("teams.etf") do
+      nil -> {:ok, %{}}
+      %{} = map -> {:ok, map}
+      list when is_list(list) -> {:ok, Enum.reduce(list, %{}, fn t, acc -> Map.put(acc, t.nombre, t) end)}
+      _ -> {:ok, %{}}
     end
-  end
-
-  # PERSISTENCIA DE PROYECTOS
-
-  @doc """
-  Guarda proyectos en `proyectos.csv`.
-  Se guardan avances y retroalimentaciones.
-  """
-  def guardar_proyectos(proyectos) when is_map(proyectos) do
-    File.mkdir_p!(@storage_dir)
-    ruta = Path.join(@storage_dir, "proyectos.csv")
-
-    encabezados = "id,nombre_equipo,descripcion,categoria,estado,avances_json,retroalimentaciones_json,creado_en\n"
-
-    filas =
-      proyectos
-      |> Map.values()
-      |> Enum.map(fn proyecto ->
-        avances_json = Jason.encode!(proyecto.avances)
-        retros_json = Jason.encode!(proyecto.retroalimentaciones)
-
-        [
-          proyecto.id,
-          escapar_csv(proyecto.nombre_equipo),
-          escapar_csv(proyecto.descripcion),
-          to_string(proyecto.categoria),
-          to_string(proyecto.estado),
-          escapar_csv(avances_json),
-          escapar_csv(retros_json),
-          DateTime.to_iso8601(proyecto.creado_en)
-        ]
-        |> Enum.join(",")
-      end)
-      |> Enum.join("\n")
-
-    File.write!(ruta, encabezados <> filas <> "\n")
-    :ok
+  rescue
+    _ -> {:ok, %{}}
   end
 
   @doc """
-  Carga proyectos desde `proyectos.csv`.
-  Reconstruye: Fechas en DateTime, Listas de avances y Retroalimentaciones con fecha
-  """
-  def cargar_proyectos do
-    ruta = Path.join(@storage_dir, "proyectos.csv")
-
-    case File.read(ruta) do
-      {:ok, contenido} ->
-        proyectos =
-          contenido
-          |> String.split("\n", trim: true)
-          |> Enum.drop(1)
-          |> Enum.map(&parsear_proyecto/1)
-          |> Enum.reject(&is_nil/1)
-          |> Map.new(fn proyecto -> {proyecto.nombre_equipo, proyecto} end)
-
-        {:ok, proyectos}
-
-      {:error, :enoent} -> {:error, :not_found}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-
-  # PERSISTENCIA DE MENTORES
-
-
-  @doc """
-  Guarda mentores en mentores.csv.
-  Las retroalimentaciones se almacenan.
-  """
-  def guardar_mentores(mentores) when is_map(mentores) do
-    File.mkdir_p!(@storage_dir)
-    ruta = Path.join(@storage_dir, "mentores.csv")
-
-    encabezados = "id,nombre,especialidad,retroalimentaciones_json\n"
-
-    filas =
-      mentores
-      |> Map.values()
-      |> Enum.map(fn mentor ->
-        retros_json = Jason.encode!(mentor.retroalimentaciones)
-
-        [
-          mentor.id,
-          escapar_csv(mentor.nombre),
-          escapar_csv(mentor.especialidad),
-          escapar_csv(retros_json)
-        ]
-        |> Enum.join(",")
-      end)
-      |> Enum.join("\n")
-
-    File.write!(ruta, encabezados <> filas <> "\n")
-    :ok
-  end
-
-  @doc """
-  Carga mentores desde mentores.csv.
+  Carga los mentores desde el archivo de persistencia.
   """
   def cargar_mentores do
-    ruta = Path.join(@storage_dir, "mentores.csv")
+    case load_etf("mentors.etf") do
+      nil -> {:ok, %{}}
+      %{} = map -> {:ok, map}
 
-    case File.read(ruta) do
-      {:ok, contenido} ->
-        mentores =
-          contenido
-          |> String.split("\n", trim: true)
-          |> Enum.drop(1)
-          |> Enum.map(&parsear_mentor/1)
-          |> Enum.reject(&is_nil/1)
-          |> Map.new(fn mentor -> {mentor.id, mentor} end)
+      list when is_list(list) ->
+        {:ok,
+         Enum.reduce(list, %{}, fn m, acc ->
+           key = if Map.has_key?(m, :id), do: m.id, else: m.nombre
+           Map.put(acc, key, m)
+         end)}
 
-        {:ok, mentores}
-
-      {:error, :enoent} -> {:error, :not_found}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-
-  # FUNCIONES PRIVADAS DE PARSEO CSV
- 
-
-  # Convierte línea CSV - struct Equipo
-  defp parsear_equipo(linea) do
-    case String.split(linea, ",") do
-      [id, nombre, tema, participantes_json, creado_en] ->
-        {:ok, participantes} = Jason.decode(desescapar_csv(participantes_json))
-        {:ok, fecha, _} = DateTime.from_iso8601(creado_en)
-
-        %Hackathon.Teams.Team{
-          id: id,
-          nombre: desescapar_csv(nombre),
-          tema: desescapar_csv(tema),
-          participantes: atomizar_participantes(participantes),
-          creado_en: fecha
-        }
-
-      _ -> nil
+      _ -> {:ok, %{}}
     end
   rescue
-    _ -> nil
+    _ -> {:ok, %{}}
   end
 
-  # Convierte línea CSV → struct Proyecto
-  defp parsear_proyecto(linea) do
-    case String.split(linea, ",") do
-      [id, nombre_equipo, descripcion, categoria, estado, avances_json, retros_json, creado_en] ->
-        {:ok, avances} = Jason.decode(desescapar_csv(avances_json))
-        {:ok, retros_raw} = Jason.decode(desescapar_csv(retros_json))
-        {:ok, fecha, _} = DateTime.from_iso8601(creado_en)
+  @doc """
+  Carga los proyectos desde el archivo de persistencia.
+  """
+  def cargar_proyectos do
+    case load_etf("projects.etf") do
+      nil -> {:ok, %{}}
+      %{} = map -> {:ok, map}
 
-        retros =
-          Enum.map(retros_raw, fn r ->
-            {:ok, fecha_retro, _} = DateTime.from_iso8601(r["fecha"])
-            %{
-              mentor: r["mentor"],
-              contenido: r["contenido"],
-              fecha: fecha_retro
-            }
-          end)
+      list when is_list(list) ->
+        {:ok,
+         Enum.reduce(list, %{}, fn p, acc ->
+           key = if Map.has_key?(p, :nombre_equipo), do: p.nombre_equipo, else: Map.get(p, :id, p)
+           Map.put(acc, key, p)
+         end)}
 
-        %Hackathon.Projects.Project{
-          id: id,
-          nombre_equipo: desescapar_csv(nombre_equipo),
-          descripcion: desescapar_csv(descripcion),
-          categoria: String.to_atom(categoria),
-          estado: String.to_atom(estado),
-          avances: avances,
-          retroalimentaciones: retros,
-          creado_en: fecha
-        }
-
-      _ -> nil
+      _ -> {:ok, %{}}
     end
   rescue
-    _ -> nil
+    _ -> {:ok, %{}}
   end
 
-  # Convierte línea CSV -> struct Mentor
-  defp parsear_mentor(linea) do
-    case String.split(linea, ",") do
-      [id, nombre, especialidad, retros_json] ->
-        {:ok, retros_raw} = Jason.decode(desescapar_csv(retros_json))
+  # chats → privada
 
-        retros =
-          Enum.map(retros_raw, fn r ->
-            {:ok, fecha, _} = DateTime.from_iso8601(r["fecha"])
-            %{
-              equipo: r["equipo"],
-              contenido: r["contenido"],
-              fecha: fecha
-            }
-          end)
+  @doc """
+  Carga todas las salas y mensajes de chat almacenados en disco.
+  """
+  defp cargar_chats do
+    salas = load_etf(Path.join("chat", "index.etf")) || []
 
-        %Hackathon.Mentors.Mentor{
-          id: id,
-          nombre: desescapar_csv(nombre),
-          especialidad: desescapar_csv(especialidad),
-          retroalimentaciones: retros
-        }
+    Enum.each(salas, fn sala ->
+      mensajes = load_file(Path.join(@chat_dir, "#{sala}.etf")) || []
+      _ = safe(fn -> Hackathon.Chat.ChatServer.crear_sala(sala) end)
+      mensajes = Enum.reverse(mensajes)
 
-      _ -> nil
-    end
-  rescue
-    _ -> nil
+      Enum.each(mensajes, fn m ->
+        _ = safe(fn -> Hackathon.Chat.ChatServer.enviar_mensaje(sala, m.autor, m.contenido) end)
+      end)
+    end)
+
+    :ok
   end
 
-  # Limpia estructura JSON de participantes
-  defp atomizar_participantes(participantes) do
-    Enum.map(participantes, fn p ->
-      %{
-        nombre: p["nombre"],
-        email: p["email"]
-      }
+  ## Guardado
+
+  @doc """
+  Guarda el mapa de equipos en el archivo teams.etf.
+  """
+  def guardar_equipos(equipos) when is_map(equipos) do
+    write_etf("teams.etf", equipos)
+    :ok
+  end
+
+  @doc """
+  Guarda una lista de equipos convirtiéndolos en mapa por nombre.
+  """
+  def guardar_equipos(equipos) when is_list(equipos) do
+    map = Enum.reduce(equipos, %{}, fn t, acc -> Map.put(acc, t.nombre, t) end)
+    guardar_equipos(map)
+  end
+
+  @doc """
+  Guarda el mapa de mentores en mentors.etf.
+  """
+  def guardar_mentores(mentores) when is_map(mentores) do
+    write_etf("mentors.etf", mentores)
+    :ok
+  end
+
+  @doc """
+  Guarda una lista de mentores convirtiéndolos en un mapa.
+  """
+  def guardar_mentores(mentores) when is_list(mentores) do
+    map =
+      Enum.reduce(mentores, %{}, fn m, acc ->
+        key = if Map.has_key?(m, :id), do: m.id, else: m.nombre
+        Map.put(acc, key, m)
+      end)
+
+    guardar_mentores(map)
+  end
+
+  @doc """
+  Guarda el mapa de proyectos en projects.etf.
+  """
+  def guardar_proyectos(proyectos) when is_map(proyectos) do
+    write_etf("projects.etf", proyectos)
+    :ok
+  end
+
+  @doc """
+  Guarda una lista de proyectos convirtiéndolos en mapa.
+  """
+  def guardar_proyectos(proyectos) when is_list(proyectos) do
+    map =
+      Enum.reduce(proyectos, %{}, fn p, acc ->
+        key = if Map.has_key?(p, :nombre_equipo), do: p.nombre_equipo, else: Map.get(p, :id, p)
+        Map.put(acc, key, p)
+      end)
+
+    guardar_proyectos(map)
+  end
+
+  @doc """
+  Guarda todas las salas y mensajes de chat en disco.
+  """
+  defp guardar_chats do
+    salas =
+      case safe(fn -> Hackathon.Chat.ChatServer.listar_salas() end) do
+        list when is_list(list) -> list
+        _ -> []
+      end
+
+    write_etf(Path.join("chat", "index.etf"), salas)
+
+    Enum.each(salas, fn sala ->
+      case Hackathon.Chat.ChatServer.obtener_historial(sala) do
+        {:ok, mensajes} ->
+          write_file(
+            Path.join(@chat_dir, "#{sala}.etf"),
+            :erlang.term_to_binary(Enum.reverse(mensajes))
+          )
+
+        _ -> :ok
+      end
     end)
   end
 
-  # Escapa comas y comillas en campos CSV
-  defp escapar_csv(texto) when is_binary(texto) do
-    if String.contains?(texto, [",", "\"", "\n"]) do
-      "\"#{String.replace(texto, "\"", "\"\"")}\""
-    else
-      texto
+  ## Helpers
+
+  @doc """
+  Crea los directorios base y de chat si no existen.
+  """
+  defp ensure_dirs do
+    File.mkdir_p!(@base_dir)
+    File.mkdir_p!(@chat_dir)
+  end
+
+  @doc """
+  Escribe un término Elixir en formato ETF dentro del directorio base.
+  """
+  defp write_etf(rel, term) do
+    full = Path.join(@base_dir, rel)
+    File.mkdir_p!(Path.dirname(full))
+    File.write!(full, :erlang.term_to_binary(term))
+  end
+
+  @doc """
+  Carga un archivo ETF y devuelve el término almacenado.
+  """
+  defp load_etf(rel) do
+    full = Path.join(@base_dir, rel)
+    if File.exists?(full), do: full |> File.read!() |> :erlang.binary_to_term()
+  rescue
+    _ -> nil
+  end
+
+  @doc """
+  Escribe binario directamente a un archivo.
+  """
+  defp write_file(path, bin), do: File.write!(path, bin)
+
+  @doc """
+  Carga un archivo binario y lo convierte desde formato ETF.
+  """
+  defp load_file(path) do
+    if File.exists?(path), do: path |> File.read!() |> :erlang.binary_to_term()
+  rescue
+    _ -> nil
+  end
+
+  @doc """
+  Ejecuta una función atrapando errores y devolviendo {:error, :unavailable} si falla.
+  """
+  defp safe(fun) do
+    try do
+      fun.()
+    rescue
+      _ -> {:error, :unavailable}
     end
   end
 
-  # Revierte escape CSV
-  defp desescapar_csv(texto) when is_binary(texto) do
-    texto
-    |> String.trim()
-    |> String.trim("\"")
-    |> String.replace("\"\"", "\"")
+  @doc """
+  Ejecuta una función esperando una lista; si falla o no es lista, retorna [].
+  """
+  defp safe_list(fun) do
+    case safe(fun) do
+      list when is_list(list) -> list
+      _ -> []
+    end
   end
 
+  @doc """
+  Devuelve información del nodo: nombre, nodos conectados y cookie.
+  """
+  def cluster_info do
+    %{
+      nodo: Node.self(),
+      nodos_conectados: Node.list(),
+      cookie: Node.get_cookie()
+    }
+  end
+
+  @doc """
+  Lista las salas de chat persistidas en disco.
+  """
+  def listar_salas_persistidas do
+    load_etf(Path.join("chat", "index.etf")) || []
+  rescue
+    _ -> []
+  end
 end
+

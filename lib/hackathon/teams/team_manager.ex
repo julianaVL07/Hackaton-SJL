@@ -1,70 +1,56 @@
 defmodule Hackathon.Teams.TeamManager do
   @moduledoc """
-  GenServer que gestiona todos los equipos de la hackathon.
-  Se encarga de crear, listar y actualizar equipos, así como de
-  agregar participantes. También maneja la persistencia de datos en CSV
-  mediante el módulo `Hackathon.Storage`.
+  GenServer que gestiona los equipos de la hackathon.
   """
 
-  # Permite usar funciones GenServer (manejo de procesos con estado).
   use GenServer
-
-  # Acceso corto al módulo de estructura de equipos.
   alias Hackathon.Teams.Team
-
-  # Acceso corto al módulo encargado del almacenamiento en CSV.
   alias Hackathon.Storage
 
   # API Pública
 
-  #Inicia el proceso GenServer que gestionará los equipos (inicia el GenServer con un estado vacío y lo registra con el nombre del módulo)
+  @doc "Inicia el servidor TeamManager."
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
   end
 
-  # Crea un nuevo equipo con el nombre y tema indicados.
+  @doc "Crea un nuevo equipo con nombre y tema."
   def crear_equipo(nombre, tema) do
     GenServer.call(__MODULE__, {:crear_equipo, nombre, tema})
   end
 
-  # Agrega un participante a un equipo existente.
+  @doc "Agrega un participante a un equipo."
   def agregar_participante(nombre_equipo, nombre_participante, email) do
     GenServer.call(__MODULE__, {:agregar_participante, nombre_equipo, nombre_participante, email})
   end
 
-  # Devuelve la lista completa de equipos registrados.
+  @doc "Devuelve la lista de equipos."
   def listar_equipos do
     GenServer.call(__MODULE__, :listar_equipos)
   end
 
-  # Obtiene la información de un equipo específico por su nombre.
+  @doc "Obtiene la información de un equipo por su nombre."
   def obtener_equipo(nombre_equipo) do
     GenServer.call(__MODULE__, {:obtener_equipo, nombre_equipo})
   end
-
+  
   # Callbacks
 
-  @doc """
-  Inicializa el GenServer cargando los equipos desde almacenamiento persistente.
-  Si no hay datos guardados, inicia con un mapa vacío.
-  """
+  @doc "Inicializa el estado cargando equipos desde almacenamiento."
   @impl true
   def init(_initial_state) do
     state =
-      case Storage.cargar_equipos() do
-        {:ok, data} -> data
-        {:error, :not_found} -> %{}
+      case Hackathon.Storage.cargar_equipos() do
+        {:ok, %{} = data} -> data
+        {:ok, list} when is_list(list) ->
+          Enum.reduce(list, %{}, fn t, acc -> Map.put(acc, t.nombre, t) end)
+        _ -> %{}
       end
 
     {:ok, state}
   end
 
-  @doc """
-  Crea un nuevo equipo con el `nombre` y `tema` proporcionados.
-
-  - Si el equipo ya existe, devuelve `{:error, :equipo_existente}`.
-  - Si no existe, lo crea, lo agrega al estado y persiste los cambios.
-  """
+  @doc "Callback para crear un nuevo equipo."
   @impl true
   def handle_call({:crear_equipo, nombre, tema}, _from, state) do
     case Map.has_key?(state, nombre) do
@@ -79,19 +65,7 @@ defmodule Hackathon.Teams.TeamManager do
     end
   end
 
-  @doc """
-  Agrega un participante a un equipo existente.
-
-  Recibe:
-    - `nombre_equipo`: nombre del equipo al que se agregará el participante
-    - `nombre_participante`: nombre del participante
-    - `email`: correo electrónico del participante
-
-  Comportamiento:
-    - Si el equipo no existe, devuelve `{:error, :equipo_no_encontrado}`.
-    - Si ocurre un error al agregar el participante, devuelve `{:error, reason}`.
-    - Si se agrega correctamente, actualiza el estado y persiste los cambios.
-  """
+  @doc "Callback para agregar un participante a un equipo."
   @impl true
   def handle_call(
         {:agregar_participante, nombre_equipo, nombre_participante, email},
@@ -115,21 +89,13 @@ defmodule Hackathon.Teams.TeamManager do
     end
   end
 
-  @doc """
-  Devuelve la lista de todos los equipos actualmente almacenados en el estado.
-  """
+  @doc "Callback para devolver todos los equipos."
   @impl true
   def handle_call(:listar_equipos, _from, state) do
-    equipos = Map.values(state)
-    {:reply, equipos, state}
+    {:reply, Map.values(state), state}
   end
 
-  @doc """
-  Devuelve un equipo específico por su nombre.
-
-  - Si el equipo existe, retorna `{:ok, equipo}`.
-  - Si no existe, retorna `{:error, :equipo_no_encontrado}`.
-  """
+  @doc "Callback para obtener los datos de un equipo."
   @impl true
   def handle_call({:obtener_equipo, nombre_equipo}, _from, state) do
     case Map.fetch(state, nombre_equipo) do

@@ -1,26 +1,23 @@
 defmodule Hackathon.Projects.ProjectManager do
   @moduledoc """
-  GenServer que administra todos los proyectos de la hackathon.
-  Se encarga de crear, actualizar y almacenar los proyectos,
-  incluyendo su persistencia en archivos CSV.
+  GenServer que gestiona los proyectos del hackathon y los guarda en archivos ETF.
   """
 
   use GenServer
   alias Hackathon.Projects.Project
   alias Hackathon.Storage
 
-  # API PÚBLICA
+  # API Pública
 
   @doc """
-  Inicia el servidor encargado de gestionar los proyectos.
+  Inicia el servidor de proyectos y carga los datos guardados.
   """
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
   end
 
   @doc """
-  Crea un nuevo proyecto con su nombre de equipo, descripción y categoría.
-  Guarda el proyecto en memoria y en el archivo CSV.
+  Crea un proyecto nuevo con nombre de equipo, descripción y categoría.
   """
   def crear_proyecto(nombre_equipo, descripcion, categoria) do
     GenServer.call(__MODULE__, {:crear_proyecto, nombre_equipo, descripcion, categoria})
@@ -28,22 +25,34 @@ defmodule Hackathon.Projects.ProjectManager do
 
   @doc """
   Actualiza el estado de un proyecto existente.
-  Por ejemplo: `:en_progreso`, `:finalizado`, etc.
   """
   def actualizar_estado_proyecto(nombre_equipo, estado) do
     GenServer.call(__MODULE__, {:actualizar_estado, nombre_equipo, estado})
   end
 
   @doc """
-  Agrega un nuevo avance o progreso al proyecto.
+  Agrega un avance al proyecto de un equipo.
   """
   def agregar_avance_proyecto(nombre_equipo, avance) do
     GenServer.call(__MODULE__, {:agregar_avance, nombre_equipo, avance})
   end
 
   @doc """
-  Agrega una retroalimentación de un mentor al proyecto.
-  La retroalimentación incluye el nombre del mentor, el contenido del comentario y la fecha.
+  Registra un avance adicional en un proyecto.
+  """
+  def registrar_avance(nombre_equipo, avance) do
+    GenServer.call(__MODULE__, {:registrar_avance, nombre_equipo, avance})
+  end
+
+  @doc """
+  Lista todos los proyectos del sistema.
+  """
+  def listar_proyectos do
+    GenServer.call(__MODULE__, :listar_proyectos)
+  end
+
+  @doc """
+  Agrega una retroalimentación de un mentor a un proyecto.
   """
   def agregar_retroalimentacion_proyecto(nombre_equipo, mentor_nombre, contenido) do
     GenServer.call(
@@ -53,33 +62,32 @@ defmodule Hackathon.Projects.ProjectManager do
   end
 
   @doc """
-  Obtiene la información completa de un proyecto según su nombre de equipo.
+  Obtiene un proyecto según el nombre del equipo.
   """
   def obtener_proyecto(nombre_equipo) do
     GenServer.call(__MODULE__, {:obtener_proyecto, nombre_equipo})
   end
 
   @doc """
-  Lista todos los proyectos pertenecientes a una categoría específica.
+  Lista los proyectos que pertenecen a una categoría específica.
   """
   def listar_proyectos_por_categoria(categoria) do
     GenServer.call(__MODULE__, {:listar_por_categoria, categoria})
   end
 
   @doc """
-  Lista todos los proyectos que se encuentran en un determinado estado.
+  Lista los proyectos que están en un estado determinado.
   """
   def listar_proyectos_por_estado(estado) do
     GenServer.call(__MODULE__, {:listar_por_estado, estado})
   end
 
-  # CALLBACKS DEL SERVIDOR
+  # Callbacks
 
-  @impl true
   @doc """
-  Inicializa el servidor cargando los proyectos desde el archivo CSV.
-  Si no existe, empieza con un estado vacío.
+  Carga los proyectos desde almacenamiento o inicia con un estado vacío.
   """
+  @impl true
   def init(_initial_state) do
     state =
       case Storage.cargar_proyectos() do
@@ -90,13 +98,10 @@ defmodule Hackathon.Projects.ProjectManager do
     {:ok, state}
   end
 
-  @impl true
   @doc """
-  Maneja la creación de un nuevo proyecto.
-
-  Si el nombre del equipo ya existe, devuelve un error.
-  En caso contrario, crea el proyecto, lo guarda y actualiza el estado del servidor.
+  Maneja la creación de un proyecto y lo guarda.
   """
+  @impl true
   def handle_call({:crear_proyecto, nombre_equipo, descripcion, categoria}, _from, state) do
     case Map.has_key?(state, nombre_equipo) do
       true ->
@@ -110,12 +115,10 @@ defmodule Hackathon.Projects.ProjectManager do
     end
   end
 
-  @impl true
   @doc """
-  Actualiza el estado de un proyecto existente.
-
-  Devuelve el proyecto actualizado si se encuentra, o un error si no existe.
+  Maneja la actualización del estado de un proyecto.
   """
+  @impl true
   def handle_call({:actualizar_estado, nombre_equipo, estado}, _from, state) do
     case Map.fetch(state, nombre_equipo) do
       {:ok, proyecto} ->
@@ -129,13 +132,10 @@ defmodule Hackathon.Projects.ProjectManager do
     end
   end
 
-  @impl true
   @doc """
-  Agrega un avance a un proyecto.
-
-  Si el proyecto existe, se actualiza con el nuevo avance y se guarda.
-  En caso contrario, devuelve un error.
+  Maneja la adición de avances a un proyecto.
   """
+  @impl true
   def handle_call({:agregar_avance, nombre_equipo, avance}, _from, state) do
     case Map.fetch(state, nombre_equipo) do
       {:ok, proyecto} ->
@@ -149,13 +149,27 @@ defmodule Hackathon.Projects.ProjectManager do
     end
   end
 
-  @impl true
   @doc """
-  Agrega una retroalimentación de un mentor a un proyecto.
-
-  Incluye el nombre del mentor y el contenido del comentario.
-  Si el proyecto no existe, devuelve un error.
+  Maneja el registro de un avance adicional en un proyecto.
   """
+  @impl true
+  def handle_call({:registrar_avance, nombre_equipo, avance}, _from, state) do
+    case Map.fetch(state, nombre_equipo) do
+      {:ok, proyecto} ->
+        proyecto_actualizado = Project.agregar_avance(proyecto, avance)
+        nuevo_state = Map.put(state, nombre_equipo, proyecto_actualizado)
+        Storage.guardar_proyectos(nuevo_state)
+        {:reply, {:ok, proyecto_actualizado}, nuevo_state}
+
+      :error ->
+        {:reply, {:error, :proyecto_no_encontrado}, state}
+    end
+  end
+
+  @doc """
+  Maneja agregar retroalimentación al proyecto de un equipo.
+  """
+  @impl true
   def handle_call(
         {:agregar_retroalimentacion, nombre_equipo, mentor_nombre, contenido},
         _from,
@@ -175,26 +189,21 @@ defmodule Hackathon.Projects.ProjectManager do
     end
   end
 
-  @impl true
   @doc """
-  Obtiene la información completa de un proyecto por su nombre de equipo.
-
-  Devuelve el proyecto si existe o un error si no se encuentra.
+  Devuelve un proyecto según el nombre del equipo.
   """
+  @impl true
   def handle_call({:obtener_proyecto, nombre_equipo}, _from, state) do
     case Map.fetch(state, nombre_equipo) do
-      {:ok, proyecto} ->
-        {:reply, {:ok, proyecto}, state}
-
-      :error ->
-        {:reply, {:error, :proyecto_no_encontrado}, state}
+      {:ok, proyecto} -> {:reply, {:ok, proyecto}, state}
+      :error -> {:reply, {:error, :proyecto_no_encontrado}, state}
     end
   end
 
-  @impl true
   @doc """
-  Lista todos los proyectos que pertenecen a una categoría específica.
+  Filtra los proyectos por categoría.
   """
+  @impl true
   def handle_call({:listar_por_categoria, categoria}, _from, state) do
     proyectos =
       state
@@ -204,10 +213,10 @@ defmodule Hackathon.Projects.ProjectManager do
     {:reply, proyectos, state}
   end
 
-  @impl true
   @doc """
-  Lista todos los proyectos que tienen un estado determinado.
+  Filtra los proyectos por su estado actual.
   """
+  @impl true
   def handle_call({:listar_por_estado, estado}, _from, state) do
     proyectos =
       state
@@ -217,4 +226,12 @@ defmodule Hackathon.Projects.ProjectManager do
     {:reply, proyectos, state}
   end
 
+  @doc """
+  Devuelve todos los proyectos registrados.
+  """
+  @impl true
+  def handle_call(:listar_proyectos, _from, state) do
+    {:reply, Map.values(state), state}
+  end
 end
+

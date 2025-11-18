@@ -1,20 +1,7 @@
 defmodule Hackathon do
   @moduledoc """
-  Punto de entrada principal del sistema Hackathon.
-
-  Este módulo funciona como *API unificada*: expone funciones públicas
-  para gestionar equipos, proyectos, chat y mentores sin que el usuario
-  tenga que conocer la lógica interna ni los módulos que lo soportan.
-
-  Internamente, solo delega las llamadas hacia los distintos managers:
-
-    • TeamManager   — Equipos y participantes
-    • ProjectManager — Proyectos, avances y retroalimentaciones
-    • ChatServer     — Salas y mensajes
-    • MentorManager  — Registro y acciones de mentores
-
-  También incluye un mecanismo de *reset* para pruebas, que limpia tanto
-  la persistencia como el estado en memoria de todos los módulos del sistema.
+  Módulo principal - API unificada para toda la aplicación.
+  Exposición de todas las operaciones para equipos, proyectos, chat y mentoría.
   """
 
   # ============================
@@ -103,15 +90,7 @@ defmodule Hackathon do
   # ============================
 
   @doc """
-  Restablece el estado completo del sistema a valores vacíos.
-
-  Usado principalmente en pruebas. Realiza tres acciones:
-
-    1. Limpia toda la persistencia almacenada en disco.
-    2. Llama a reset/0 en cada manager (si existe).
-    3. Limpia el estado global del chat.
-
-  Devuelve :ok.
+  Obtiene los datos de un mentor según su ID.
   """
   def reset do
     # Limpia archivos o datos persistidos

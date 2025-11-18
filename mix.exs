@@ -1,15 +1,6 @@
 defmodule Hackathon.MixProject do
-  @moduledoc """
-  Configuración principal del proyecto Hackathon.
-  Forma parte de la estructura generada por Mix para gestionar compilación,
-  dependencias y ejecución del sistema.
-  """
-
   use Mix.Project
 
-  @doc """
-  Define la configuración general del proyecto.
-  """
   def project do
     [
       app: :hackathon,
@@ -20,9 +11,6 @@ defmodule Hackathon.MixProject do
     ]
   end
 
-  @doc """
-  Configura la aplicación OTP al momento de ejecutarse.
-  """
   def application do
     [
       extra_applications: [:logger],
@@ -30,9 +18,6 @@ defmodule Hackathon.MixProject do
     ]
   end
 
-  @doc """
-  Lista de dependencias externas requeridas por el proyecto.
-  """
   defp deps do
     [
       {:phoenix_pubsub, "~> 2.1"},

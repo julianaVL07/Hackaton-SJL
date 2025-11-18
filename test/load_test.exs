@@ -1,8 +1,9 @@
 defmodule LoadTest do
   @moduledoc """
-  Módulo de pruebas de carga diseñado para evaluar el rendimiento del sistema
-  de hackathon bajo condiciones de alta concurrencia.
+  Pruebas de carga para evaluar el rendimiento del sistema
+  con múltiples equipos y participantes concurrentes.
   """
+
   def simular_hackathon(num_equipos, participantes_por_equipo) do
     IO.puts("\n INICIANDO PRUEBA DE CARGA")
     IO.puts("  Equipos: #{num_equipos}")
@@ -11,9 +12,7 @@ defmodule LoadTest do
 
     inicio = System.monotonic_time(:millisecond)
 
-
-    # 1. Crear equipos en paralelo
-
+    # Crear equipos en paralelo
     equipos_task =
       Task.async(fn ->
         crear_equipos_paralelo(num_equipos)
@@ -24,38 +23,32 @@ defmodule LoadTest do
 
     IO.puts(" #{length(equipos)} equipos creados en #{tiempo_equipos}ms")
 
-
-    # 2. Agregar participantes a cada equipo
-
+    # Agregar participantes en paralelo
     inicio_participantes = System.monotonic_time(:millisecond)
 
     agregar_participantes_paralelo(equipos, participantes_por_equipo)
 
     tiempo_participantes = System.monotonic_time(:millisecond) - inicio_participantes
+
     IO.puts(" Participantes agregados en #{tiempo_participantes}ms")
 
-
-    # 3. Crear proyectos para cada equipo
-
+    # Crear proyectos
     inicio_proyectos = System.monotonic_time(:millisecond)
 
     crear_proyectos_paralelo(equipos)
 
     tiempo_proyectos = System.monotonic_time(:millisecond) - inicio_proyectos
+
     IO.puts(" Proyectos creados en #{tiempo_proyectos}ms")
 
-
-    # 4. Enviar mensajes en salas de chat en paralelo
-
+    # Simular actividad de chat
     inicio_chat = System.monotonic_time(:millisecond)
 
     simular_chat_paralelo(equipos, 10)
 
     tiempo_chat = System.monotonic_time(:millisecond) - inicio_chat
+
     IO.puts(" Mensajes enviados en #{tiempo_chat}ms")
-
-
-    # 5. Métricas finales
 
     tiempo_total = System.monotonic_time(:millisecond) - inicio
 
@@ -67,13 +60,6 @@ defmodule LoadTest do
     :ok
   end
 
-
-
-  #  SUBPROCESOS DE PRUEBA (Ejecución en paralelo)
-
- @doc """
-  Crea múltiples equipos en paralelo usando Task.async_stream/3.
-  """
   defp crear_equipos_paralelo(num_equipos) do
     1..num_equipos
     |> Task.async_stream(
@@ -93,10 +79,6 @@ defmodule LoadTest do
     |> Enum.reject(&is_nil/1)
   end
 
-
-  @doc """
-  Agrega participantes a cada equipo en paralelo.
-  """
   defp agregar_participantes_paralelo(equipos, num_participantes) do
     equipos
     |> Task.async_stream(
@@ -114,11 +96,6 @@ defmodule LoadTest do
     |> Stream.run()
   end
 
-
-  @doc """
-  Crea un proyecto para cada equipo en paralelo.
-  A cada proyecto se le asigna una categoría aleatoria y una descripción genérica.
-  """
   defp crear_proyectos_paralelo(equipos) do
     categorias = [:social, :ambiental, :educativo]
 
@@ -135,11 +112,6 @@ defmodule LoadTest do
     |> Stream.run()
   end
 
-
-  @doc """
-  Simula actividad de chat paralela.
-  Para cada equipo crea una sala de chat y envía varios mensajes automáticos.
-  """
   defp simular_chat_paralelo(equipos, mensajes_por_equipo) do
     equipos
     |> Task.async_stream(
@@ -159,3 +131,4 @@ defmodule LoadTest do
     |> Stream.run()
   end
 end
+

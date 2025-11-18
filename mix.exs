@@ -1,4 +1,9 @@
 defmodule Hackathon.MixProject do
+  @moduledoc """
+  Configuración principal del proyecto Hackathon:
+  nombre, versión, dependencias y módulo de arranque.
+  """
+
   use Mix.Project
 
   def project do
@@ -11,6 +16,7 @@ defmodule Hackathon.MixProject do
     ]
   end
 
+  @doc "Define la aplicación OTP y su módulo supervisor."
   def application do
     [
       extra_applications: [:logger],
@@ -18,6 +24,7 @@ defmodule Hackathon.MixProject do
     ]
   end
 
+  @doc "Dependencias del proyecto."
   defp deps do
     [
       {:phoenix_pubsub, "~> 2.1"},

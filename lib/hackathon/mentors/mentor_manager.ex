@@ -1,7 +1,17 @@
 defmodule Hackathon.Mentors.MentorManager do
   @moduledoc """
   GenServer que gestiona mentores y el sistema de mentoría.
-  Ahora incluye persistencia en CSV y registra retroalimentaciones en proyectos.
+
+  Funcionalidades:
+    - Registrar mentores con nombre y especialidad.
+    - Enviar retroalimentaciones a proyectos de equipos.
+    - Consultar mentores por ID o por especialidad.
+    - Listar todos los mentores.
+    - Resetear todo el estado de mentores (útil en tests).
+
+  Persistencia:
+    - Todos los cambios se guardan mediante `Hackathon.Storage`.
+    - La retroalimentación también se registra en `Hackathon.Projects.ProjectManager`.
   """
 
   use GenServer
@@ -11,41 +21,90 @@ defmodule Hackathon.Mentors.MentorManager do
 
   @storage_key "mentores"
 
-  # API Pública
+  # -----------------------------
+  # API PÚBLICA
+  # -----------------------------
 
+  @doc """
+  Inicia el GenServer del MentorManager.
+  """
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
   end
 
+  @doc """
+  Registra un nuevo mentor con nombre y especialidad.
+
+  Retorna:
+    - `{:ok, mentor}` con el mentor recién creado.
+  """
   def registrar_mentor(nombre, especialidad) do
     GenServer.call(__MODULE__, {:registrar_mentor, nombre, especialidad})
   end
 
+  @doc """
+  Envía una retroalimentación a un proyecto de un equipo.
+
+  Parámetros:
+    - `mentor_id`: ID del mentor que envía la retroalimentación.
+    - `equipo`: nombre del equipo destinatario.
+    - `contenido`: texto de la retroalimentación.
+
+  Efectos:
+    - Actualiza el mentor con la retroalimentación.
+    - Registra la retroalimentación en el proyecto del equipo.
+
+  Retorna:
+    - `{:ok, mentor_actualizado}` si se registró correctamente.
+    - `{:error, :mentor_no_encontrado}` si el mentor no existe.
+  """
   def enviar_retroalimentacion(mentor_id, equipo, contenido) do
     GenServer.call(__MODULE__, {:enviar_retroalimentacion, mentor_id, equipo, contenido})
   end
 
+  @doc """
+  Lista todos los mentores existentes.
+  """
   def listar_mentores do
     GenServer.call(__MODULE__, :listar_mentores)
   end
 
+  @doc """
+  Obtiene un mentor por su ID.
+
+  Retorna:
+    - `{:ok, mentor}` si existe.
+    - `{:error, :mentor_no_encontrado}` si no existe.
+  """
   def obtener_mentor(mentor_id) do
     GenServer.call(__MODULE__, {:obtener_mentor, mentor_id})
   end
 
+  @doc """
+  Resetea todos los mentores, tanto en memoria como en almacenamiento persistente.
+  """
   def reset do
     GenServer.call(__MODULE__, :reset)
   end
 
+  @doc """
+  Busca mentores filtrando por especialidad.
+
+  Retorna:
+    - Lista de mentores cuya especialidad coincide (ignorando mayúsculas/minúsculas).
+  """
   def buscar_por_especialidad(especialidad) do
     GenServer.call(__MODULE__, {:buscar_por_especialidad, especialidad})
   end
 
-  # Callbacks
+  # -----------------------------
+  # CALLBACKS GENSERVER
+  # -----------------------------
 
   @impl true
+  @doc false
   def init(_initial_state) do
-    # Carga el estado desde CSV o usa un mapa vacío
+    # Carga el estado desde Storage o usa un mapa vacío si no existe.
     state =
       case Storage.cargar_mentores() do
         {:ok, data} -> data
@@ -91,11 +150,8 @@ defmodule Hackathon.Mentors.MentorManager do
   @impl true
   def handle_call({:obtener_mentor, mentor_id}, _from, state) do
     case Map.fetch(state, mentor_id) do
-      {:ok, mentor} ->
-        {:reply, {:ok, mentor}, state}
-
-      :error ->
-        {:reply, {:error, :mentor_no_encontrado}, state}
+      {:ok, mentor} -> {:reply, {:ok, mentor}, state}
+      :error -> {:reply, {:error, :mentor_no_encontrado}, state}
     end
   end
 

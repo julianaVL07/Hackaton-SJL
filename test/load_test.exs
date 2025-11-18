@@ -1,9 +1,25 @@
 defmodule LoadTest do
   @moduledoc """
-  Pruebas de carga para evaluar el rendimiento del sistema
-  con múltiples equipos y participantes concurrentes.
+  Utilidades para ejecutar pruebas de carga del sistema Hackathon.
+
+  La prueba simula:
+    - Creación masiva de equipos
+    - Registro concurrente de participantes
+    - Creación de proyectos
+    - Envío de mensajes en chats
+
+  Todo se ejecuta en paralelo para medir rendimiento.
   """
 
+  @doc """
+  Ejecuta una prueba de carga completa.
+
+  Recibe:
+    - `num_equipos`: cantidad de equipos a crear
+    - `participantes_por_equipo`: usuarios a registrar en cada equipo
+
+  Mide tiempos parciales y totales.
+  """
   def simular_hackathon(num_equipos, participantes_por_equipo) do
     IO.puts("\n INICIANDO PRUEBA DE CARGA")
     IO.puts("  Equipos: #{num_equipos}")
@@ -12,42 +28,26 @@ defmodule LoadTest do
 
     inicio = System.monotonic_time(:millisecond)
 
-    # Crear equipos en paralelo
     equipos_task =
-      Task.async(fn ->
-        crear_equipos_paralelo(num_equipos)
-      end)
+      Task.async(fn -> crear_equipos_paralelo(num_equipos) end)
 
     equipos = Task.await(equipos_task, 30_000)
     tiempo_equipos = System.monotonic_time(:millisecond) - inicio
-
     IO.puts(" #{length(equipos)} equipos creados en #{tiempo_equipos}ms")
 
-    # Agregar participantes en paralelo
     inicio_participantes = System.monotonic_time(:millisecond)
-
     agregar_participantes_paralelo(equipos, participantes_por_equipo)
-
     tiempo_participantes = System.monotonic_time(:millisecond) - inicio_participantes
-
     IO.puts(" Participantes agregados en #{tiempo_participantes}ms")
 
-    # Crear proyectos
     inicio_proyectos = System.monotonic_time(:millisecond)
-
     crear_proyectos_paralelo(equipos)
-
     tiempo_proyectos = System.monotonic_time(:millisecond) - inicio_proyectos
-
     IO.puts(" Proyectos creados en #{tiempo_proyectos}ms")
 
-    # Simular actividad de chat
     inicio_chat = System.monotonic_time(:millisecond)
-
     simular_chat_paralelo(equipos, 10)
-
     tiempo_chat = System.monotonic_time(:millisecond) - inicio_chat
-
     IO.puts(" Mensajes enviados en #{tiempo_chat}ms")
 
     tiempo_total = System.monotonic_time(:millisecond) - inicio
@@ -60,6 +60,11 @@ defmodule LoadTest do
     :ok
   end
 
+  @doc """
+  Crea varios equipos en paralelo usando `Task.async_stream`.
+
+  Retorna una lista con los nombres de los equipos creados.
+  """
   defp crear_equipos_paralelo(num_equipos) do
     1..num_equipos
     |> Task.async_stream(
@@ -79,6 +84,9 @@ defmodule LoadTest do
     |> Enum.reject(&is_nil/1)
   end
 
+  @doc """
+  Agrega `num_participantes` a cada equipo en paralelo.
+  """
   defp agregar_participantes_paralelo(equipos, num_participantes) do
     equipos
     |> Task.async_stream(
@@ -96,6 +104,9 @@ defmodule LoadTest do
     |> Stream.run()
   end
 
+  @doc """
+  Crea un proyecto para cada equipo en paralelo.
+  """
   defp crear_proyectos_paralelo(equipos) do
     categorias = [:social, :ambiental, :educativo]
 
@@ -112,6 +123,9 @@ defmodule LoadTest do
     |> Stream.run()
   end
 
+  @doc """
+  Simula actividad de chat para cada equipo, enviando varios mensajes en paralelo.
+  """
   defp simular_chat_paralelo(equipos, mensajes_por_equipo) do
     equipos
     |> Task.async_stream(
@@ -131,4 +145,3 @@ defmodule LoadTest do
     |> Stream.run()
   end
 end
-

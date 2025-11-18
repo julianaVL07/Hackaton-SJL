@@ -3,6 +3,7 @@
                         'Elixir.Hackathon.Auth','Elixir.Hackathon.CLI',
                         'Elixir.Hackathon.Chat.ChatServer',
                         'Elixir.Hackathon.Chat.Message',
+                        'Elixir.Hackathon.Cluster','Elixir.Hackathon.Cmd',
                         'Elixir.Hackathon.Mentors.Mentor',
                         'Elixir.Hackathon.Mentors.MentorManager',
                         'Elixir.Hackathon.Projects.Project',

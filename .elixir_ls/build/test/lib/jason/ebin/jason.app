@@ -21,6 +21,6 @@
                         'Elixir.Jason.OrderedObject','Elixir.Jason.Sigil']},
               {optional_applications,[decimal]},
               {applications,[kernel,stdlib,elixir,decimal]},
-              {description,"A blazing fast JSON parser and generator in pure Elixir.\n"},
+              {description,"A blazing fast JSON parser and generator in pure Elixir.\r\n"},
               {registered,[]},
               {vsn,"1.4.4"}]}.

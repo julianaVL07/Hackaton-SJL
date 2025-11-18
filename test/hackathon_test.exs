@@ -23,8 +23,6 @@ defmodule HackathonTest do
   end
 
 
-  #  EQUIPOS
-
   describe "Gestión de Equipos" do
     @tag :equipos
     test "crear equipo exitosamente" do
@@ -52,8 +50,6 @@ defmodule HackathonTest do
     end
   end
 
-
-  #  PROYECTOS
 
   describe "Gestión de Proyectos" do
     @tag :proyectos
@@ -94,9 +90,6 @@ defmodule HackathonTest do
     end
   end
 
-
-  #  CHAT
-
   describe "Sistema de Chat" do
     @tag :chat
     test "crear sala de chat" do
@@ -118,14 +111,14 @@ defmodule HackathonTest do
     end
   end
 
-
-  #  MENTORÍA
-
-  describe "Sistema de Mentoría" do
-    @tag :mentoria
-    test "registrar un mentor" do
-      assert {:ok, m} = Hackathon.registrar_mentor("Dr. Smith", "IA")
-      assert m.especialidad == "IA"
+   @doc """
+    Verifica que un mentor pueda registrarse con nombre y especialidad válidos.
+    """
+    describe "Sistema de Mentoría" do
+    test "registrar mentor" do
+      assert {:ok, mentor} = Hackathon.registrar_mentor("Dr. Smith", "IA")
+      assert mentor.nombre == "Dr. Smith"
+      assert mentor.especialidad == "IA"
     end
 
     test "enviar retroalimentación a un equipo" do

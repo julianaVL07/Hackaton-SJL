@@ -1,15 +1,16 @@
 defmodule Hackathon.Storage do
   @moduledoc """
-  Persistencia global (equipos, proyectos, mentores, chats) usando archivos ETF.
+  Módulo responsable de la persistencia global del sistema Hackathon.
   """
 
   @base_dir Path.join(Application.app_dir(:hackathon, "priv"), "storage")
   @chat_dir Path.join(@base_dir, "chat")
 
-  ## API
+  # API PRINCIPAL
+
 
   @doc """
-  Inicializa el sistema de persistencia cargando todos los datos desde disco.
+  Inicializa el sistema de almacenamiento al arrancar la aplicación.
   """
   def bootstrap do
     ensure_dirs()
@@ -21,7 +22,7 @@ defmodule Hackathon.Storage do
   end
 
   @doc """
-  Guarda el estado actual de equipos, mentores, proyectos y chats en archivos ETF.
+  Persistencia completa del estado del runtime.
   """
   def persist_state do
     ensure_dirs()
@@ -38,7 +39,7 @@ defmodule Hackathon.Storage do
       end)
 
     proyectos_map =
-      case safe(fn -> apply(Hackathon.Projects.ProjectManager, :listar_proyectos, []) end) do
+      case safe(fn -> Hackathon.Projects.ProjectManager.listar_proyectos() end) do
         list when is_list(list) ->
           Enum.reduce(list, %{}, fn p, acc ->
             key =
@@ -48,6 +49,7 @@ defmodule Hackathon.Storage do
           end)
 
         _ ->
+          # Estado mínimo en caso de fallo
           %{
             "default" => %{
               id: "default",
@@ -67,7 +69,7 @@ defmodule Hackathon.Storage do
   end
 
   @doc """
-  Retorna información básica de persistencia: cantidades guardadas de equipos, proyectos, mentores y salas.
+  Devuelve información estadística de los archivos persistidos:
   """
   def persist_info do
     ensure_dirs()
@@ -85,16 +87,34 @@ defmodule Hackathon.Storage do
     }
   end
 
-  ## Carga (públicas para los managers)
+  @doc """
+  Elimina de manera completa todos los archivos persistidos en priv/storage.
+  Se utiliza en pruebas que requieren estado limpio.
+  """
+  def clear_all do
+    try do
+      File.rm_rf!(@base_dir)
+    rescue
+      _ -> :ok
+    end
+
+    ensure_dirs()
+    :ok
+  end
+
+
+  # CARGA DESDE DISCO (USADO EN BOOTSTRAP Y POR LOS MANAGERS)
+
 
   @doc """
-  Carga los equipos desde el archivo de persistencia.
+  Carga los equipos desde su archivo ETF.
   """
   def cargar_equipos do
     case load_etf("teams.etf") do
       nil -> {:ok, %{}}
       %{} = map -> {:ok, map}
-      list when is_list(list) -> {:ok, Enum.reduce(list, %{}, fn t, acc -> Map.put(acc, t.nombre, t) end)}
+      list when is_list(list) ->
+        {:ok, Enum.reduce(list, %{}, fn t, acc -> Map.put(acc, t.nombre, t) end)}
       _ -> {:ok, %{}}
     end
   rescue
@@ -102,20 +122,19 @@ defmodule Hackathon.Storage do
   end
 
   @doc """
-  Carga los mentores desde el archivo de persistencia.
+  Carga mentores desde disco aplicando las mismas reglas de compatibilidad
+  que cargar_equipos/0.
   """
   def cargar_mentores do
     case load_etf("mentors.etf") do
       nil -> {:ok, %{}}
       %{} = map -> {:ok, map}
-
       list when is_list(list) ->
         {:ok,
          Enum.reduce(list, %{}, fn m, acc ->
            key = if Map.has_key?(m, :id), do: m.id, else: m.nombre
            Map.put(acc, key, m)
          end)}
-
       _ -> {:ok, %{}}
     end
   rescue
@@ -123,76 +142,70 @@ defmodule Hackathon.Storage do
   end
 
   @doc """
-  Carga los proyectos desde el archivo de persistencia.
+  Carga proyectos desde disco, soporta versiones anteriores y valores faltantes.
   """
   def cargar_proyectos do
     case load_etf("projects.etf") do
       nil -> {:ok, %{}}
       %{} = map -> {:ok, map}
-
       list when is_list(list) ->
         {:ok,
          Enum.reduce(list, %{}, fn p, acc ->
            key = if Map.has_key?(p, :nombre_equipo), do: p.nombre_equipo, else: Map.get(p, :id, p)
            Map.put(acc, key, p)
          end)}
-
       _ -> {:ok, %{}}
     end
   rescue
     _ -> {:ok, %{}}
   end
 
-  # chats → privada
 
-  @doc """
-  Carga todas las salas y mensajes de chat almacenados en disco.
-  """
+  # CARGA DE CHATS Y RECONSTRUCCIÓN DEL CHATSERVER
   defp cargar_chats do
     salas = load_etf(Path.join("chat", "index.etf")) || []
 
     Enum.each(salas, fn sala ->
       mensajes = load_file(Path.join(@chat_dir, "#{sala}.etf")) || []
       _ = safe(fn -> Hackathon.Chat.ChatServer.crear_sala(sala) end)
+
       mensajes = Enum.reverse(mensajes)
 
       Enum.each(mensajes, fn m ->
-        _ = safe(fn -> Hackathon.Chat.ChatServer.enviar_mensaje(sala, m.autor, m.contenido) end)
+        safe(fn -> Hackathon.Chat.ChatServer.enviar_mensaje(sala, m.autor, m.contenido) end)
       end)
     end)
 
     :ok
   end
 
-  ## Guardado
+
+  # PERSISTENCIA A DISCO (LLAMADO POR LOS MANAGERS)
+
 
   @doc """
-  Guarda el mapa de equipos en el archivo teams.etf.
+  Guarda todos los equipos en teams.etf.
+  Acepta mapas o listas de estructuras.
   """
   def guardar_equipos(equipos) when is_map(equipos) do
     write_etf("teams.etf", equipos)
     :ok
   end
 
-  @doc """
-  Guarda una lista de equipos convirtiéndolos en mapa por nombre.
-  """
   def guardar_equipos(equipos) when is_list(equipos) do
     map = Enum.reduce(equipos, %{}, fn t, acc -> Map.put(acc, t.nombre, t) end)
     guardar_equipos(map)
   end
 
   @doc """
-  Guarda el mapa de mentores en mentors.etf.
+  Guarda los mentores en mentors.etf.
+  Admite lista o mapa, normaliza claves usando id o nombre.
   """
   def guardar_mentores(mentores) when is_map(mentores) do
     write_etf("mentors.etf", mentores)
     :ok
   end
 
-  @doc """
-  Guarda una lista de mentores convirtiéndolos en un mapa.
-  """
   def guardar_mentores(mentores) when is_list(mentores) do
     map =
       Enum.reduce(mentores, %{}, fn m, acc ->
@@ -204,16 +217,13 @@ defmodule Hackathon.Storage do
   end
 
   @doc """
-  Guarda el mapa de proyectos en projects.etf.
+  Guarda los proyectos en projects.etf, normalizando claves.
   """
   def guardar_proyectos(proyectos) when is_map(proyectos) do
     write_etf("projects.etf", proyectos)
     :ok
   end
 
-  @doc """
-  Guarda una lista de proyectos convirtiéndolos en mapa.
-  """
   def guardar_proyectos(proyectos) when is_list(proyectos) do
     map =
       Enum.reduce(proyectos, %{}, fn p, acc ->
@@ -224,9 +234,7 @@ defmodule Hackathon.Storage do
     guardar_proyectos(map)
   end
 
-  @doc """
-  Guarda todas las salas y mensajes de chat en disco.
-  """
+  # Guardado de chats
   defp guardar_chats do
     salas =
       case safe(fn -> Hackathon.Chat.ChatServer.listar_salas() end) do
@@ -244,15 +252,18 @@ defmodule Hackathon.Storage do
             :erlang.term_to_binary(Enum.reverse(mensajes))
           )
 
-        _ -> :ok
+        _ ->
+          :ok
       end
     end)
   end
 
-  ## Helpers
 
-  @doc """
-  Crea los directorios base y de chat si no existen.
+  # HELPERS Y WRAPPERS SEGUROS
+
+
+ @doc """
+  Garantiza que los directorios de almacenamiento existen.
   """
   defp ensure_dirs do
     File.mkdir_p!(@base_dir)
@@ -260,7 +271,7 @@ defmodule Hackathon.Storage do
   end
 
   @doc """
-  Escribe un término Elixir en formato ETF dentro del directorio base.
+  Escribe un término Elixir en formato ETF dentro del directorio de almacenamiento.
   """
   defp write_etf(rel, term) do
     full = Path.join(@base_dir, rel)
@@ -269,7 +280,7 @@ defmodule Hackathon.Storage do
   end
 
   @doc """
-  Carga un archivo ETF y devuelve el término almacenado.
+  Carga un archivo ETF desde disco y lo convierte nuevamente a un término Elixir.
   """
   defp load_etf(rel) do
     full = Path.join(@base_dir, rel)
@@ -279,12 +290,12 @@ defmodule Hackathon.Storage do
   end
 
   @doc """
-  Escribe binario directamente a un archivo.
+  Escribe un archivo binario en disco sin aplicar serialización.
   """
   defp write_file(path, bin), do: File.write!(path, bin)
 
   @doc """
-  Carga un archivo binario y lo convierte desde formato ETF.
+  Lee un archivo binario desde disco y lo convierte a un término Elixir.
   """
   defp load_file(path) do
     if File.exists?(path), do: path |> File.read!() |> :erlang.binary_to_term()
@@ -293,7 +304,8 @@ defmodule Hackathon.Storage do
   end
 
   @doc """
-  Ejecuta una función atrapando errores y devolviendo {:error, :unavailable} si falla.
+  Envuelve una operación en un try/rescue, devolviendo {:error, :unavailable}
+  en caso de excepciones.
   """
   defp safe(fun) do
     try do
@@ -304,7 +316,8 @@ defmodule Hackathon.Storage do
   end
 
   @doc """
-  Ejecuta una función esperando una lista; si falla o no es lista, retorna [].
+  Igual que safe/1, pero garantiza devolver siempre una lista.
+  Se usa en operaciones que esperan múltiples resultados.
   """
   defp safe_list(fun) do
     case safe(fun) do
@@ -314,7 +327,7 @@ defmodule Hackathon.Storage do
   end
 
   @doc """
-  Devuelve información del nodo: nombre, nodos conectados y cookie.
+  Devuelve información del nodo y del cluster
   """
   def cluster_info do
     %{
@@ -325,7 +338,8 @@ defmodule Hackathon.Storage do
   end
 
   @doc """
-  Lista las salas de chat persistidas en disco.
+  Devuelve la lista de salas persistidas en disco, sin cargar mensajes.
+  Útil para inspección rápida.
   """
   def listar_salas_persistidas do
     load_etf(Path.join("chat", "index.etf")) || []
@@ -333,4 +347,3 @@ defmodule Hackathon.Storage do
     _ -> []
   end
 end
-

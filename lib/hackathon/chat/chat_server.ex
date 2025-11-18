@@ -1,14 +1,12 @@
 defmodule Hackathon.Chat.ChatServer do
   @moduledoc """
-  GenServer que implementa el sistema de chat distribuido usando PubSub y registro global.
+  GenServer que gestiona el sistema de chat usando PubSub.
 
-  Características:
-    - Chat compartido entre múltiples nodos del cluster (ChatServer global).
-    - Manejo seguro cuando ya existe un servidor remoto.
-    - Salas dinámicas.
-    - Historial de mensajes por sala.
-    - PubSub en tiempo real para notificaciones de mensajes.
-    - Reacción a eventos del cluster (nodeup, nodedown).
+  Funcionalidades principales:
+  - Crear y listar salas de chat.
+  - Enviar y recibir mensajes en tiempo real.
+  - Guardar el historial de mensajes por sala.
+  - Mantener un canal general para anuncios.
   """
 
   use GenServer
@@ -39,11 +37,8 @@ defmodule Hackathon.Chat.ChatServer do
   end
 
   @doc """
-  Crea una sala nueva de chat.
-
-  Retorna:
-    - {:ok, sala} si fue creada,
-    - {:error, :sala_existente} si ya existe.
+  Crea una nueva sala de chat con el nombre dado.
+  Retorna un error si la sala ya existe.
   """
   def crear_sala(nombre_sala) do
     safe_call({:crear_sala, nombre_sala})
@@ -80,8 +75,8 @@ defmodule Hackathon.Chat.ChatServer do
   end
 
   @doc """
-  Se suscribe a los eventos de PubSub de una sala.
-  Recibe mensajes del tipo: {:nuevo_mensaje, msg}.
+  Suscribe un proceso a una sala específica.
+  El proceso recibirá los mensajes nuevos que se envíen en esa sala.
   """
   def suscribirse(sala) do
     Phoenix.PubSub.subscribe(Hackathon.PubSub, "chat:#{sala}")
@@ -94,59 +89,7 @@ defmodule Hackathon.Chat.ChatServer do
     Phoenix.PubSub.unsubscribe(Hackathon.PubSub, "chat:#{sala}")
   end
 
-  @doc """
-  Información del estado del cluster:
-    - nodo actual
-    - nodos conectados
-    - total
-    - pid del ChatServer global
-  """
-  def info_cluster do
-    %{
-      nodo_actual: Node.self(),
-      nodos_conectados: Node.list(),
-      total_nodos: length(Node.list()) + 1,
-      servidor_principal: :global.whereis_name(__MODULE__)
-    }
-  end
-
-  # ============================
-  #     FUNCIONES DE SOPORTE
-  # ============================
-
-  @doc """
-  Realiza un GenServer.call/3 de forma segura, incluso si el ChatServer
-  está en otro nodo o aún no se ha levantado.
-  """
-  defp safe_call(mensaje, timeout \\ 5000) do
-    case :global.whereis_name(__MODULE__) do
-      :undefined -> {:error, :chat_server_no_disponible}
-      pid -> GenServer.call(pid, mensaje, timeout)
-    end
-  rescue
-    e -> {:error, {:exception, e}}
-  end
-
-  @doc """
-  Envia un GenServer.cast/2 de forma segura, manejando errores
-  si el servidor global no existe todavía.
-  """
-  defp safe_cast(mensaje) do
-    case :global.whereis_name(__MODULE__) do
-      :undefined ->
-        {:error, :chat_server_no_disponible}
-
-      pid ->
-        GenServer.cast(pid, mensaje)
-        :ok
-    end
-  rescue
-    e -> {:error, {:exception, e}}
-  end
-
-  # ========================
-  #       CALLBACKS
-  # ========================
+  # CALLBACKS DEL SERVIDOR
 
   @impl true
   @doc """

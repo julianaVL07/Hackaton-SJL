@@ -1,157 +1,257 @@
 defmodule Hackathon.Chat.ChatServer do
   @moduledoc """
-  GenServer que gestiona el sistema de chat usando PubSub.
+  GenServer que implementa el sistema de chat distribuido usando PubSub y registro global.
 
-  Funcionalidades principales:
-  - Crear y listar salas de chat.
-  - Enviar y recibir mensajes en tiempo real.
-  - Guardar el historial de mensajes por sala.
-  - Mantener un canal general para anuncios.
+  Características:
+    - Chat compartido entre múltiples nodos del cluster (ChatServer global).
+    - Manejo seguro cuando ya existe un servidor remoto.
+    - Salas dinámicas.
+    - Historial de mensajes por sala.
+    - PubSub en tiempo real para notificaciones de mensajes.
+    - Reacción a eventos del cluster (nodeup, nodedown).
   """
 
   use GenServer
   alias Hackathon.Chat.Message
 
-  # El estado guarda las salas y sus mensajes: %{nombre_sala => [mensajes]}
   @type state :: %{String.t() => [Message.t()]}
 
-  # API PÚBLICA
+  # ========================
+  #      API PÚBLICA
+  # ========================
 
   @doc """
-  Inicia el servidor del chat con una sala predeterminada llamada `"general"`.
+  Inicia el ChatServer usando registro global.
+
+  Si ya existe en otro nodo:
+    - No crea uno nuevo.
+    - Se conecta al existente.
   """
   def start_link(_opts) do
-    GenServer.start_link(__MODULE__, %{"general" => []}, name: __MODULE__)
+    case GenServer.start_link(__MODULE__, %{"general" => []}, name: {:global, __MODULE__}) do
+      {:ok, pid} ->
+        {:ok, pid}
+
+      {:error, {:already_started, pid}} ->
+        IO.puts("Usando ChatServer remoto en nodo #{node(pid)}")
+        :ignore
+    end
   end
 
   @doc """
-  Crea una nueva sala de chat con el nombre dado.
-  Retorna un error si la sala ya existe.
+  Crea una sala nueva de chat.
+
+  Retorna:
+    - {:ok, sala} si fue creada,
+    - {:error, :sala_existente} si ya existe.
   """
   def crear_sala(nombre_sala) do
-    GenServer.call(__MODULE__, {:crear_sala, nombre_sala})
+    safe_call({:crear_sala, nombre_sala})
   end
 
   @doc """
-  Envía un mensaje a una sala específica.
-  El mensaje se guarda en el historial y se transmite a todos los suscriptores mediante PubSub.
+  Envía un mensaje a una sala.
+
+  Usado para comunicación en tiempo real.
   """
   def enviar_mensaje(sala, autor, contenido) do
-    GenServer.cast(__MODULE__, {:enviar_mensaje, sala, autor, contenido})
+    safe_cast({:enviar_mensaje, sala, autor, contenido})
   end
 
   @doc """
-  Obtiene el historial de mensajes de una sala.
-  Retorna los mensajes en orden cronológico (del más antiguo al más reciente).
+  Obtiene el historial completo de una sala como lista de mensajes.
   """
   def obtener_historial(sala) do
-    GenServer.call(__MODULE__, {:obtener_historial, sala})
+    safe_call({:obtener_historial, sala})
   end
 
   @doc """
-  Lista los nombres de todas las salas disponibles en el sistema.
+  Retorna todas las salas existentes en el sistema.
   """
   def listar_salas do
-    GenServer.call(__MODULE__, :listar_salas)
+    safe_call(:listar_salas)
   end
 
   @doc """
-  Suscribe un proceso a una sala específica.
-  El proceso recibirá los mensajes nuevos que se envíen en esa sala.
+  Reinicia el estado del chat, dejando solo la sala 'general'.
+  """
+  def reset do
+    safe_call(:reset)
+  end
+
+  @doc """
+  Se suscribe a los eventos de PubSub de una sala.
+  Recibe mensajes del tipo: {:nuevo_mensaje, msg}.
   """
   def suscribirse(sala) do
     Phoenix.PubSub.subscribe(Hackathon.PubSub, "chat:#{sala}")
   end
 
   @doc """
-  Cancela la suscripción del proceso a una sala.
-  Deja de recibir mensajes en tiempo real de esa sala.
+  Cancela la suscripción a los eventos de una sala.
   """
   def desuscribirse(sala) do
     Phoenix.PubSub.unsubscribe(Hackathon.PubSub, "chat:#{sala}")
   end
 
-  # CALLBACKS DEL SERVIDOR
+  @doc """
+  Información del estado del cluster:
+    - nodo actual
+    - nodos conectados
+    - total
+    - pid del ChatServer global
+  """
+  def info_cluster do
+    %{
+      nodo_actual: Node.self(),
+      nodos_conectados: Node.list(),
+      total_nodos: length(Node.list()) + 1,
+      servidor_principal: :global.whereis_name(__MODULE__)
+    }
+  end
+
+  # ============================
+  #     FUNCIONES DE SOPORTE
+  # ============================
+
+  @doc """
+  Realiza un GenServer.call/3 de forma segura, incluso si el ChatServer
+  está en otro nodo o aún no se ha levantado.
+  """
+  defp safe_call(mensaje, timeout \\ 5000) do
+    case :global.whereis_name(__MODULE__) do
+      :undefined -> {:error, :chat_server_no_disponible}
+      pid -> GenServer.call(pid, mensaje, timeout)
+    end
+  rescue
+    e -> {:error, {:exception, e}}
+  end
+
+  @doc """
+  Envia un GenServer.cast/2 de forma segura, manejando errores
+  si el servidor global no existe todavía.
+  """
+  defp safe_cast(mensaje) do
+    case :global.whereis_name(__MODULE__) do
+      :undefined ->
+        {:error, :chat_server_no_disponible}
+
+      pid ->
+        GenServer.cast(pid, mensaje)
+        :ok
+    end
+  rescue
+    e -> {:error, {:exception, e}}
+  end
+
+  # ========================
+  #       CALLBACKS
+  # ========================
 
   @impl true
   @doc """
-  Inicializa el estado del servidor con la sala `"general"` vacía.
+  Configura el estado inicial e inicia el monitoreo de nodos del cluster.
   """
   def init(initial_state) do
+    :net_kernel.monitor_nodes(true)
+
+    IO.puts("ChatServer iniciado en nodo: #{Node.self()}")
+    IO.puts("   PID global: #{inspect(self())}")
+
     {:ok, initial_state}
   end
 
   @impl true
   @doc """
-  Maneja la creación de una nueva sala de chat.
-  Si ya existe, retorna un error; si no, la agrega al estado.
+  Crea una sala de chat si no existe.
   """
   def handle_call({:crear_sala, nombre_sala}, _from, state) do
-    case Map.has_key?(state, nombre_sala) do
-      true ->
-        {:reply, {:error, :sala_existente}, state}
-
-      false ->
-        nuevo_state = Map.put(state, nombre_sala, [])
-        {:reply, {:ok, nombre_sala}, nuevo_state}
+    if Map.has_key?(state, nombre_sala) do
+      {:reply, {:error, :sala_existente}, state}
+    else
+      nuevo_state = Map.put(state, nombre_sala, [])
+      IO.puts("Sala creada: #{nombre_sala} en nodo #{Node.self()}")
+      {:reply, {:ok, nombre_sala}, nuevo_state}
     end
   end
 
   @impl true
   @doc """
-  Devuelve el historial de mensajes de una sala.
-  Si la sala no existe, retorna un error.
+  Retorna el historial de una sala (ordenado del más antiguo al más reciente).
   """
   def handle_call({:obtener_historial, sala}, _from, state) do
     case Map.fetch(state, sala) do
-      {:ok, mensajes} ->
-        # Retorna mensajes en orden cronológico (los más antiguos primero)
-        {:reply, {:ok, Enum.reverse(mensajes)}, state}
-
-      :error ->
-        {:reply, {:error, :sala_no_encontrada}, state}
+      {:ok, mensajes} -> {:reply, {:ok, Enum.reverse(mensajes)}, state}
+      :error -> {:reply, {:error, :sala_no_encontrada}, state}
     end
   end
 
   @impl true
   @doc """
-  Devuelve la lista de todas las salas registradas en el servidor.
+  Lista todas las salas registradas.
   """
   def handle_call(:listar_salas, _from, state) do
-    salas = Map.keys(state)
-    {:reply, salas, state}
+    {:reply, Map.keys(state), state}
   end
 
   @impl true
   @doc """
-  Procesa el envío de un mensaje:
-  - Crea el mensaje.
-  - Lo agrega al historial de la sala.
-  - Lo difunde por PubSub a los usuarios suscritos.
+  Restablece el estado dejando solo la sala 'general'.
+  """
+  def handle_call(:reset, _from, _state) do
+    nuevo_state = %{"general" => []}
+    {:reply, :ok, nuevo_state}
+  end
+
+  @impl true
+  @doc """
+  Maneja el envío de un mensaje a una sala y lo difunde por PubSub.
   """
   def handle_cast({:enviar_mensaje, sala, autor, contenido}, state) do
-    # Verifica si la sala existe
-    case Map.has_key?(state, sala) do
-      true ->
-        # Crea el mensaje
-        mensaje = Message.new(autor, contenido, sala)
+    if Map.has_key?(state, sala) do
+      mensaje = Message.new(autor, contenido, sala)
+      mensajes_actualizados = [mensaje | Map.get(state, sala)]
+      nuevo_state = Map.put(state, sala, mensajes_actualizados)
 
-        # Agrega el mensaje al historial (al inicio de la lista)
-        mensajes_actualizados = [mensaje | Map.get(state, sala)]
-        nuevo_state = Map.put(state, sala, mensajes_actualizados)
+      Phoenix.PubSub.broadcast(
+        Hackathon.PubSub,
+        "chat:#{sala}",
+        {:nuevo_mensaje, mensaje}
+      )
 
-        # Difunde el mensaje a todos los suscriptores via PubSub
-        Phoenix.PubSub.broadcast(
-          Hackathon.PubSub,
-          "chat:#{sala}",
-          {:nuevo_mensaje, mensaje}
-        )
+      IO.puts("[#{Node.self()}] Mensaje: [#{sala}] #{autor}: #{contenido}")
 
-        {:noreply, nuevo_state}
-
-      false ->
-        # Si la sala no existe, no hace nada
-        {:noreply, state}
+      {:noreply, nuevo_state}
+    else
+      IO.puts("Sala no encontrada: #{sala}")
+      {:noreply, state}
     end
+  end
+
+  @impl true
+  @doc """
+  Evento cuando un nodo del cluster se conecta.
+  """
+  def handle_info({:nodeup, nodo}, state) do
+    IO.puts("Nodo conectado: #{nodo}")
+    IO.puts("   Cluster: #{inspect([Node.self() | Node.list()])}")
+    {:noreply, state}
+  end
+
+  @impl true
+  @doc """
+  Evento cuando un nodo del cluster se desconecta.
+  """
+  def handle_info({:nodedown, nodo}, state) do
+    IO.puts("Nodo desconectado: #{nodo}")
+    {:noreply, state}
+  end
+
+  @impl true
+  @doc """
+  Ignora mensajes no manejados.
+  """
+  def handle_info(_msg, state) do
+    {:noreply, state}
   end
 end

@@ -1,16 +1,7 @@
-@doc """
-Módulo encargado de ejecutar pruebas de carga para medir el rendimiento
-global del sistema bajo múltiples operaciones concurrentes.
-"""
 defmodule LoadTest do
   @moduledoc """
-  Pruebas de carga para evaluar el rendimiento del sistema
-  con múltiples equipos y participantes concurrentes.
-  """
-
-  @doc """
-  Función principal que coordina la creación de equipos, participantes,
-  proyectos y mensajes de chat, midiendo tiempos de ejecución.
+  Módulo de pruebas de carga diseñado para evaluar el rendimiento del sistema
+  de hackathon bajo condiciones de alta concurrencia.
   """
   def simular_hackathon(num_equipos, participantes_por_equipo) do
     IO.puts("\n INICIANDO PRUEBA DE CARGA")
@@ -21,11 +12,8 @@ defmodule LoadTest do
     inicio = System.monotonic_time(:millisecond)
 
 
+    # 1. Crear equipos en paralelo
 
-    @doc """
-    Crea equipos concurrentemente utilizando `Task.async_stream`, retornando
-    la lista de equipos creados y midiendo su tiempo de ejecución.
-    """
     equipos_task =
       Task.async(fn ->
         crear_equipos_paralelo(num_equipos)
@@ -37,51 +25,41 @@ defmodule LoadTest do
     IO.puts(" #{length(equipos)} equipos creados en #{tiempo_equipos}ms")
 
 
+    # 2. Agregar participantes a cada equipo
 
-    @doc """
-    Agrega participantes a cada equipo de manera paralela.
-    Mide el tiempo necesario para completar el proceso.
-    """
     inicio_participantes = System.monotonic_time(:millisecond)
 
     agregar_participantes_paralelo(equipos, participantes_por_equipo)
 
     tiempo_participantes = System.monotonic_time(:millisecond) - inicio_participantes
+    IO.puts(" Participantes agregados en #{tiempo_participantes}ms")
 
-    IO.puts("Participantes agregados en #{tiempo_participantes}ms")
 
-    @doc """
-    Crea un proyecto por equipo utilizando concurrencia,
-    asignando categorías aleatorias y midiendo el tiempo.
-    """
+    # 3. Crear proyectos para cada equipo
+
     inicio_proyectos = System.monotonic_time(:millisecond)
 
     crear_proyectos_paralelo(equipos)
 
     tiempo_proyectos = System.monotonic_time(:millisecond) - inicio_proyectos
+    IO.puts(" Proyectos creados en #{tiempo_proyectos}ms")
 
-    IO.puts("Proyectos creados en #{tiempo_proyectos}ms")
 
-    #Comit 6 - Simular mensajes de chat en paralelo
-    @doc """
-    Simula la actividad del chat enviando múltiples mensajes por equipo
-    a través de procesos concurrentes.
-    """
+    # 4. Enviar mensajes en salas de chat en paralelo
+
     inicio_chat = System.monotonic_time(:millisecond)
 
     simular_chat_paralelo(equipos, 10)
 
     tiempo_chat = System.monotonic_time(:millisecond) - inicio_chat
+    IO.puts(" Mensajes enviados en #{tiempo_chat}ms")
 
-    IO.puts("Mensajes enviados en #{tiempo_chat}ms")
 
-    @doc """
-    Calcula y muestra un resumen general del rendimiento, incluyendo
-    tiempo total, promedio por equipo y equipos procesados por segundo.
-    """
+    # 5. Métricas finales
+
     tiempo_total = System.monotonic_time(:millisecond) - inicio
 
-    IO.puts("\nRESUMEN:")
+    IO.puts("\n RESUMEN:")
     IO.puts("  Tiempo total: #{tiempo_total}ms")
     IO.puts("  Promedio por equipo: #{div(tiempo_total, num_equipos)}ms")
     IO.puts("  Equipos/segundo: #{Float.round(num_equipos / (tiempo_total / 1000), 2)}")
@@ -89,9 +67,12 @@ defmodule LoadTest do
     :ok
   end
 
-  @doc """
-  Crea varios equipos en paralelo asignando temas aleatorios.
-  Utiliza Task.async_stream para maximizar eficiencia.
+
+
+  #  SUBPROCESOS DE PRUEBA (Ejecución en paralelo)
+
+ @doc """
+  Crea múltiples equipos en paralelo usando Task.async_stream/3.
   """
   defp crear_equipos_paralelo(num_equipos) do
     1..num_equipos
@@ -112,9 +93,9 @@ defmodule LoadTest do
     |> Enum.reject(&is_nil/1)
   end
 
-   @doc """
-  Agrega múltiples participantes a cada equipo de manera concurrente.
-  Cada participante recibe un email único basado en su equipo.
+
+  @doc """
+  Agrega participantes a cada equipo en paralelo.
   """
   defp agregar_participantes_paralelo(equipos, num_participantes) do
     equipos
@@ -133,9 +114,10 @@ defmodule LoadTest do
     |> Stream.run()
   end
 
+
   @doc """
-  Crea proyectos para cada equipo seleccionando categorías aleatorias.
-  La creación se realiza de forma concurrente.
+  Crea un proyecto para cada equipo en paralelo.
+  A cada proyecto se le asigna una categoría aleatoria y una descripción genérica.
   """
   defp crear_proyectos_paralelo(equipos) do
     categorias = [:social, :ambiental, :educativo]
@@ -153,9 +135,10 @@ defmodule LoadTest do
     |> Stream.run()
   end
 
+
   @doc """
-  Crea una sala de chat por equipo y envía múltiples mensajes de prueba
-  para evaluar rendimiento del módulo de chat.
+  Simula actividad de chat paralela.
+  Para cada equipo crea una sala de chat y envía varios mensajes automáticos.
   """
   defp simular_chat_paralelo(equipos, mensajes_por_equipo) do
     equipos
@@ -175,9 +158,4 @@ defmodule LoadTest do
     )
     |> Stream.run()
   end
-
-
-# Ejecutar prueba
-# LoadTest.simular_hackathon(100, 5)  # 100 equipos, 5 participantes cada uno
-
 end

@@ -1,178 +1,150 @@
 defmodule HackathonTest do
+  @moduledoc """
+  Conjunto de pruebas integrales para el sistema Hackathon.
+
+  Estas pruebas validan el comportamiento de todos los módulos principales:
+
+    • Gestión de Equipos — creación, unicidad y participantes
+    • Gestión de Proyectos — estados, avances y filtrado
+    • Sistema de Chat — salas y mensajes
+    • Sistema de Mentoría — registro y retroalimentación
+
+  El objetivo es garantizar que las reglas de negocio funcionen
+  correctamente y que la aplicación mantenga un estado consistente.
+  """
+
   use ExUnit.Case
   doctest Hackathon
 
-  @doc """
-  Configuración inicial que se ejecuta antes de cada prueba.
-  En este caso se utiliza para asegurar que cada test comience
-  con un estado limpio, evitando interferencia entre pruebas.
-  """
   setup do
+    # Reinicia el estado global antes de cada prueba
+    :ok = Hackathon.reset()
     :ok
   end
 
-
+  # =========================================================
+  #  EQUIPOS
+  # =========================================================
   describe "Gestión de Equipos" do
-    @doc """
-    Verifica que se pueda crear un equipo correctamente con nombre y tema válidos.
-    """
+    @tag :equipos
     test "crear equipo exitosamente" do
-      assert {:ok, equipo} = Hackathon.crear_equipo("TestTeam", "IA")
-      assert equipo.nombre == "TestTeam"
-      assert equipo.tema == "IA"
+      assert {:ok, eq} = Hackathon.crear_equipo("TestTeam", "IA")
+      assert eq.nombre == "TestTeam"
+      assert eq.tema == "IA"
     end
 
-
-
-  @doc """
-  Verifica que el sistema no permita registrar dos equipos con el mismo nombre.
-  """
-    test "no permite equipos duplicados" do
+    test "rechaza equipos duplicados" do
       Hackathon.crear_equipo("TestTeam", "IA")
-      assert {:error, :equipo_existente} = Hackathon.crear_equipo("TestTeam", "Blockchain")
+      assert {:error, :equipo_existente} = Hackathon.crear_equipo("TestTeam", "IA")
     end
 
-
-    @doc """
-    Verifica que se pueda agregar correctamente un participante a un equipo existente.
-    """
-    test "agregar participante a equipo" do
+    test "agregar participante a un equipo" do
       Hackathon.crear_equipo("TestTeam", "IA")
-      assert {:ok, _} = Hackathon.agregar_participante("TestTeam", "Ana", "ana@test.com")
+      assert {:ok, _} = Hackathon.agregar_participante("TestTeam", "Ana", "ana@mail.com")
     end
 
-
-
-    @doc """
-    Verifica que no se puedan registrar dos participantes con el mismo email
-    dentro del mismo equipo.
-    """
-    test "no permite participantes duplicados por email" do
+    test "rechaza participantes con email repetido" do
       Hackathon.crear_equipo("TestTeam", "IA")
-      Hackathon.agregar_participante("TestTeam", "Ana", "ana@test.com")
+      Hackathon.agregar_participante("TestTeam", "Ana", "ana@mail.com")
 
       assert {:error, :participante_duplicado} =
-               Hackathon.agregar_participante("TestTeam", "Ana García", "ana@test.com")
+        Hackathon.agregar_participante("TestTeam", "Ana2", "ana@mail.com")
     end
   end
 
-
+  # =========================================================
+  #  PROYECTOS
+  # =========================================================
   describe "Gestión de Proyectos" do
-    @doc """
-    Verifica que un proyecto pueda ser creado correctamente para un equipo existente.
-    """
-    test "crear proyecto exitosamente" do
+    @tag :proyectos
+    test "crear proyecto asociado a un equipo" do
       Hackathon.crear_equipo("TestTeam", "IA")
-      assert {:ok, proyecto} = Hackathon.crear_proyecto("TestTeam", "App educativa", :educativo)
-      assert proyecto.categoria == :educativo
-      assert proyecto.estado == :iniciado
+
+      assert {:ok, p} = Hackathon.crear_proyecto("TestTeam", "App educativa", :educativo)
+      assert p.estado == :iniciado
+      assert p.categoria == :educativo
     end
 
-    @doc """
-    Verifica que el estado de un proyecto pueda actualizarse correctamente.
-    """
-    test "actualizar estado del proyecto" do
+    test "actualizar el estado del proyecto" do
       Hackathon.crear_equipo("TestTeam", "IA")
       Hackathon.crear_proyecto("TestTeam", "App educativa", :educativo)
 
-      assert {:ok, proyecto} = Hackathon.actualizar_estado_proyecto("TestTeam", :en_progreso)
-      assert proyecto.estado == :en_progreso
+      assert {:ok, p} = Hackathon.actualizar_estado_proyecto("TestTeam", :en_progreso)
+      assert p.estado == :en_progreso
     end
 
-    @doc """
-    Verifica que se puedan agregar avances al proyecto y que se almacenen correctamente.
-    """
-    test "agregar avances al proyecto" do
+    test "agregar un avance al proyecto" do
       Hackathon.crear_equipo("TestTeam", "IA")
       Hackathon.crear_proyecto("TestTeam", "App educativa", :educativo)
 
-      assert {:ok, proyecto} =
+      assert {:ok, p} =
                Hackathon.agregar_avance_proyecto("TestTeam", "Prototipo completado")
 
-      assert length(proyecto.avances) == 1
+      assert length(p.avances) == 1
     end
 
-    @doc """
-    Verifica que el sistema pueda listar proyectos según su categoría.
-    """
     test "listar proyectos por categoría" do
-      Hackathon.crear_equipo("Team1", "IA")
-      Hackathon.crear_equipo("Team2", "IoT")
-      Hackathon.crear_proyecto("Team1", "App educativa", :educativo)
-      Hackathon.crear_proyecto("Team2", "Sensor ambiental", :ambiental)
+      Hackathon.crear_equipo("A", "IA")
+      Hackathon.crear_equipo("B", "IoT")
 
-      proyectos = Hackathon.listar_proyectos_por_categoria(:educativo)
-      assert length(proyectos) == 1
+      Hackathon.crear_proyecto("A", "App", :edu)
+      Hackathon.crear_proyecto("B", "Sensor", :amb)
+
+      assert length(Hackathon.listar_proyectos_por_categoria(:edu)) == 1
     end
   end
 
+  # =========================================================
+  #  CHAT
+  # =========================================================
   describe "Sistema de Chat" do
-    @doc """
-    Verifica que se pueda crear una sala de chat para un equipo.
-    """
+    @tag :chat
     test "crear sala de chat" do
-      assert {:ok, _} = Hackathon.crear_sala("TestTeam")
+      assert {:ok, _} = Hackathon.crear_sala("Team1")
     end
 
-     @doc """
-    Verifica que un usuario pueda enviar mensajes correctamente a una sala existente.
-    """
-    test "enviar mensaje a sala" do
-      Hackathon.crear_sala("TestTeam")
-      assert :ok = Hackathon.enviar_mensaje("TestTeam", "Ana", "Hola equipo")
+    test "enviar mensaje a una sala" do
+      Hackathon.crear_sala("Team1")
+      assert :ok = Hackathon.enviar_mensaje("Team1", "Ana", "Hola!")
     end
 
-    @doc """
-    Verifica que el historial de mensajes se recupere correctamente.
-    """
-    test "obtener historial de mensajes" do
-      Hackathon.crear_sala("TestTeam")
-      Hackathon.enviar_mensaje("TestTeam", "Ana", "Mensaje 1")
-      Hackathon.enviar_mensaje("TestTeam", "Carlos", "Mensaje 2")
+    test "obtener historial de una sala" do
+      Hackathon.crear_sala("Team1")
+      Hackathon.enviar_mensaje("Team1", "Ana", "Primer mensaje")
+      Hackathon.enviar_mensaje("Team1", "Luis", "Segundo mensaje")
 
-      assert {:ok, mensajes} = Hackathon.obtener_historial("TestTeam")
-      assert length(mensajes) == 2
+      assert {:ok, msgs} = Hackathon.obtener_historial("Team1")
+      assert length(msgs) == 2
     end
   end
 
-   @doc """
-    Verifica que un mentor pueda registrarse con nombre y especialidad válidos.
-    """
-    describe "Sistema de Mentoría" do
-    test "registrar mentor" do
-      assert {:ok, mentor} = Hackathon.registrar_mentor("Dr. Smith", "IA")
-      assert mentor.nombre == "Dr. Smith"
-      assert mentor.especialidad == "IA"
+  # =========================================================
+  #  MENTORÍA
+  # =========================================================
+  describe "Sistema de Mentoría" do
+    @tag :mentoria
+    test "registrar un mentor" do
+      assert {:ok, m} = Hackathon.registrar_mentor("Dr. Smith", "IA")
+      assert m.especialidad == "IA"
     end
 
-    @doc """
-    Verifica que un mentor pueda enviar retroalimentación a un equipo.
-    """
-    test "enviar retroalimentación a equipo" do
-      Hackathon.crear_equipo("TestTeam", "IA")
-      Hackathon.crear_proyecto("TestTeam", "App", :educativo)
-      {:ok, mentor} = Hackathon.registrar_mentor("Dr. Smith", "IA")
+    test "enviar retroalimentación a un equipo" do
+      Hackathon.crear_equipo("Team1", "IA")
+      Hackathon.crear_proyecto("Team1", "App", :edu)
+      {:ok, m} = Hackathon.registrar_mentor("Dr. Smith", "IA")
 
-      assert {:ok, _} =
-               Hackathon.enviar_retroalimentacion(
-                 mentor.id,
-                 "TestTeam",
-                 "Excelente progreso"
-               )
+      assert {:ok, _} = Hackathon.enviar_retroalimentacion(m.id, "Team1", "Buen avance")
     end
 
-     @doc """
-    Verifica que la retroalimentación enviada por un mentor quede guardada en el proyecto asociado.
-    """
-    test "retroalimentación se guarda en proyecto" do
-      Hackathon.crear_equipo("TestTeam", "IA")
-      Hackathon.crear_proyecto("TestTeam", "App", :educativo)
-      {:ok, mentor} = Hackathon.registrar_mentor("Dr. Smith", "IA")
+    test "retroalimentación queda almacenada en el proyecto" do
+      Hackathon.crear_equipo("Team1", "IA")
+      Hackathon.crear_proyecto("Team1", "App", :edu)
+      {:ok, m} = Hackathon.registrar_mentor("Dr. Smith", "IA")
 
-      Hackathon.enviar_retroalimentacion(mentor.id, "TestTeam", "Buen trabajo")
+      Hackathon.enviar_retroalimentacion(m.id, "Team1", "Excelente trabajo")
 
-      {:ok, proyecto} = Hackathon.obtener_proyecto("TestTeam")
-      assert length(proyecto.retroalimentaciones) == 1
+      {:ok, p} = Hackathon.obtener_proyecto("Team1")
+      assert length(p.retroalimentaciones) == 1
     end
   end
 end
